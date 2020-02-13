@@ -12,18 +12,22 @@
 #define OUT_PATH "/root/out.pcm"
 static FILE *g_fp = NULL;
 static FILE *g_out_fp = NULL;
+#define PCM_16000_16_1_SIZE 640
 
 static void *SWITCH_THREAD_FUNC read_data_thread(switch_thread_t *thread, void *obj)
 {
-	unsigned char rdata[172]="";
+	unsigned char rdata[PCM_16000_16_1_SIZE]="";
 	switch_size_t rlen = 0;
 	agora_session_t *session = (agora_session_t *)obj;
 	while (session->state != RS_DESTROY) {
-		rlen = fread(rdata, 172, 1, g_fp);
+		rlen = fread(rdata,  1, PCM_16000_16_1_SIZE,g_fp);
 		if (rlen > 0) {
 			switch_mutex_lock(session->readbuf_mutex);
 			switch_buffer_write(session->readbuf, rdata, rlen);
 			switch_mutex_unlock(session->readbuf_mutex);
+		}
+		if(feof(g_fp)){
+			fseek(g_fp, 0L, SEEK_SET);
 		}
 		switch_sleep(20000);
 	}
@@ -44,7 +48,7 @@ agora_session_t *agora_init_session(char *channelID)
 	session->pool = pool;
 	// todo
 	if (!g_fp) {
-		g_fp = fopen(F_PATH, "r");
+		g_fp = fopen(F_PATH, "rb+");
 	}
 	if (!g_out_fp) {
 		g_out_fp = fopen(OUT_PATH, "wb+");
@@ -63,18 +67,20 @@ agora_session_t *agora_init_session(char *channelID)
 int agora_read_data_from_session(agora_session_t *session, switch_frame_t *read_frame)
 {
 
-	switch_size_t len = 172;
+	switch_size_t len = PCM_16000_16_1_SIZE;
 	switch_assert(session);
 	len = min(len, read_frame->buflen);
 	switch_mutex_lock(session->readbuf_mutex);
 	read_frame->datalen = switch_buffer_read(session->readbuf, read_frame->data, len);
 	switch_mutex_unlock(session->readbuf_mutex);
+	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "agora_read_data_from_session %d \n", read_frame->datalen);
 	return read_frame->datalen;
 	//
 }
 int agora_write_data_to_session(agora_session_t *session, switch_frame_t *read_frame)
 {
 	switch_assert(session);
+	//switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "agora_write_data_to_session %d \n", read_frame->datalen);
 	fwrite(read_frame->data, read_frame->datalen, 1, g_out_fp);
 	return 0;
 }
