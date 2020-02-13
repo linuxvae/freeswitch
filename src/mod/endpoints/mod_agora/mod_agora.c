@@ -489,7 +489,7 @@ switch_status_t agora_read_frame(switch_core_session_t *session, switch_frame_t 
 
 	// switch_core_timer_next(&tech_pvt->timer);
 
-	if (switch_buffer_inuse(rsession->readbuf) < 172) {
+	if (switch_buffer_inuse(rsession->readbuf) < 2) {
 		/* Not enough data in buffer, return CNG frame */
 		goto cng;
 	} else {
