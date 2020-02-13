@@ -78,6 +78,8 @@
                                 <load module="mod_cdr_csv"/>
                                 <load module="mod_sofia"/>
                                 <load module="mod_loopback"/>
+                                <load module="mod_agora"/>
+                                <load module="mod_curl"/>
                                 <load module="mod_commands"/>
                                 <load module="mod_dptools"/>
                                 <load module="mod_dialplan_xml"/>

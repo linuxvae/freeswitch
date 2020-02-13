@@ -904,6 +904,12 @@ Summary:        RTPM Endpoint support for FreeSWITCH open source telephony platf
 Group:          System/Libraries
 Requires:       %{name} = %{version}-%{release}
 
+%package endpoint-agora
+Summary:        AGORA Endpoint support for FreeSWITCH open source telephony platform
+Group:          System/Libraries
+Requires:       %{name} = %{version}-%{release}
+
+
 %description endpoint-rtmp
 RTMP Endpoint support for FreeSWITCH open source telephony platform. Allows FreeSWITCH
 to be used from a RTMP client. See http://wiki.freeswitch.org/wiki/Mod_rtmp#Flex_Client
@@ -1534,7 +1540,7 @@ DIRECTORIES_MODULES=""
 #
 ######################################################################################################################
 ENDPOINTS_MODULES="endpoints/mod_dingaling ../../libs/freetdm/mod_freetdm \
-			endpoints/mod_loopback endpoints/mod_portaudio endpoints/mod_rtmp \
+			endpoints/mod_loopback endpoints/mod_agora endpoints/mod_portaudio endpoints/mod_rtmp \
 			endpoints/mod_skinny endpoints/mod_verto endpoints/mod_rtc endpoints/mod_sofia"
 
 ## DISABLED MODULES DUE TO BUILD ISSUES endpoints/mod_gsmopen endpoints/mod_h323 endpoints/mod_khomp 
@@ -1991,6 +1997,7 @@ fi
 %config(noreplace) %attr(0640, freeswitch, daemon) %{sysconfdir}/autoload_configs/redis.conf.xml
 %config(noreplace) %attr(0640, freeswitch, daemon) %{sysconfdir}/autoload_configs/rss.conf.xml
 %config(noreplace) %attr(0640, freeswitch, daemon) %{sysconfdir}/autoload_configs/rtmp.conf.xml
+%config(noreplace) %attr(0640, freeswitch, daemon) %{sysconfdir}/autoload_configs/agora.conf.xml
 %config(noreplace) %attr(0640, freeswitch, daemon) %{sysconfdir}/autoload_configs/sangoma_codec.conf.xml
 %config(noreplace) %attr(0640, freeswitch, daemon) %{sysconfdir}/autoload_configs/shout.conf.xml
 %config(noreplace) %attr(0640, freeswitch, daemon) %{sysconfdir}/autoload_configs/skinny.conf.xml
@@ -2294,6 +2301,9 @@ fi
 
 %files endpoint-rtmp
 %{MODINSTDIR}/mod_rtmp.so*
+
+%files endpoint-agora
+%{MODINSTDIR}/mod_agora.so*
 
 %files endpoint-skinny
 %{MODINSTDIR}/mod_skinny.so*
@@ -2631,6 +2641,8 @@ fi
 - added mod_http_cache
 * Tue Jun 14 2011 - michal.bielicki@seventhsignal.de
 - added mod_rtmp
+* Tue Jun 14 2011 - michal.bielicki@seventhsignal.de
+- added mod_agora
 * Fri Apr 01 2011 - michal.bielicki@seventhsignal.de
 - added hebrew language stuff
 * Wed Mar 30 2011 - michal.bielicki@seventhsignal.de

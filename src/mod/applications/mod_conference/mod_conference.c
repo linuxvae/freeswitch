@@ -3952,6 +3952,15 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_conference_load)
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Couldn't register subclass %s!\n", CONF_EVENT_MAINT);
 		return SWITCH_STATUS_TERM;
 	}
+  /* create/register custom event message type */
+  if (switch_event_reserve_subclass(VAD_START_TAKING) != SWITCH_STATUS_SUCCESS) {
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Couldn't register subclass %s!\n", VAD_START_TAKING);
+        return SWITCH_STATUS_TERM;
+  }
+  if (switch_event_reserve_subclass(VAD_STOP_TAKING) != SWITCH_STATUS_SUCCESS) {
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Couldn't register subclass %s!\n", VAD_STOP_TAKING);
+    return SWITCH_STATUS_TERM;
+  }
 
 	/* Setup the pool */
 	conference_globals.conference_pool = pool;

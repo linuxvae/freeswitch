@@ -929,6 +929,10 @@ void *SWITCH_THREAD_FUNC conference_loop_input(switch_thread_t *thread, void *ob
 						member->nogate_count -= hangover;
 					}
 					conference_utils_member_clear_flag_locked(member, MFLAG_TALKING);
+          //fire event
+          switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, VAD_STOP_TAKING);
+          switch_channel_event_set_basic_data(channel, event);
+          switch_event_fire(&event);
 					conference_member_update_status_field(member);
 					conference_member_set_score_iir(member, 0);
 					member->floor_packets = 0;
@@ -1127,6 +1131,9 @@ void *SWITCH_THREAD_FUNC conference_loop_input(switch_thread_t *thread, void *ob
 						conference_utils_member_set_flag_locked(member, MFLAG_TALKING);
 						conference_member_update_status_field(member);
 						member->floor_packets = 0;
+            switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, VAD_START_TAKING);
+            switch_channel_event_set_basic_data(channel, event);
+            switch_event_fire(&event);
 
 						
 						if (!member->first_talk_detect) {
@@ -1180,6 +1187,10 @@ void *SWITCH_THREAD_FUNC conference_loop_input(switch_thread_t *thread, void *ob
 
 						conference_utils_member_clear_flag_locked(member, MFLAG_TALKING);
 						conference_member_update_status_field(member);
+            //fire event
+            switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, VAD_STOP_TAKING);
+            switch_channel_event_set_basic_data(channel, event);
+            switch_event_fire(&event);
 
 						stop_talking_handler(member);						
 					}

@@ -4916,6 +4916,9 @@ typedef struct file_string_context file_string_context_t;
 #define FILE_STRING_CLOSE "filestring::close"
 #define FILE_STRING_FAIL "filestring::fail"
 
+//#define VAD_START_TAKING "vad::start_talking"
+//#define VAD_STOP_TAKING "vad::stop_talking"
+
 static switch_status_t next_file(switch_file_handle_t *handle)
 {
 	file_string_context_t *context = handle->private_info;
@@ -6207,6 +6210,7 @@ SWITCH_STANDARD_APP(vad_test_function)
 	int mode = -1;
 	const char *var = NULL;
 	int tmp;
+	//switch_event_t *event = NULL;
 
 	if (!zstr(data)) {
 		mode = atoi(data);
@@ -6262,10 +6266,20 @@ SWITCH_STANDARD_APP(vad_test_function)
 		vad_state = switch_vad_process(vad, frame->data, frame->datalen / 2);
 
 		if (vad_state == SWITCH_VAD_STATE_START_TALKING) {
-			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "START TALKING\n");
+      /*
+			switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, VAD_START_TAKING);
+			switch_channel_event_set_basic_data(channel, event);
+			switch_event_fire(&event);
+			*/
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "START TALKING\n");
 			switch_core_session_write_frame(session, frame, SWITCH_IO_FLAG_NONE, 0);
 		} else if (vad_state == SWITCH_VAD_STATE_STOP_TALKING) {
-			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "STOP TALKING\n");
+      /*
+			switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, VAD_STOP_TAKING);
+			switch_channel_event_set_basic_data(channel, event);
+			switch_event_fire(&event);
+			*/
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "STOP TALKING\n");
 		} else if (vad_state == SWITCH_VAD_STATE_TALKING) {
 			switch_core_session_write_frame(session, frame, SWITCH_IO_FLAG_NONE, 0);
 		} else {
@@ -6335,6 +6349,17 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_dptools_load)
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Couldn't register subclass %s!\n", FILE_STRING_OPEN);
 		return SWITCH_STATUS_TERM;
 	}
+	/* create/register custom event message type */
+  /*
+	if (switch_event_reserve_subclass(VAD_START_TAKING) != SWITCH_STATUS_SUCCESS) {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Couldn't register subclass %s!\n", VAD_START_TAKING);
+		return SWITCH_STATUS_TERM;
+	}
+	if (switch_event_reserve_subclass(VAD_STOP_TAKING) != SWITCH_STATUS_SUCCESS) {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Couldn't register subclass %s!\n", VAD_STOP_TAKING);
+		return SWITCH_STATUS_TERM;
+	}
+  */
 
 	globals.pool = pool;
 	switch_core_hash_init(&globals.pickup_hash);

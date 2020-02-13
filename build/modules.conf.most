@@ -90,6 +90,7 @@ endpoints/mod_loopback
 endpoints/mod_portaudio
 endpoints/mod_rtc
 endpoints/mod_rtmp
+endpoints/mod_agora
 endpoints/mod_skinny
 endpoints/mod_sofia
 endpoints/mod_verto

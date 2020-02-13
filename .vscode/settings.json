@@ -1,0 +1,12 @@
+{
+    "files.exclude": {
+        "**/*.lo": true,
+        "**/*.o": true
+    },
+    "files.associations": {
+        "stdio.h": "c",
+        "switch.h": "c",
+        "typeinfo": "c"
+    },
+    "C_Cpp.intelliSenseEngineFallback": "Disabled"
+}

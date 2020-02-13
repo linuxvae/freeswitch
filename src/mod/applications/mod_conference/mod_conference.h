@@ -62,6 +62,8 @@
 #define CONF_BUFFER_SIZE 1024 * 128
 #define CONF_EVENT_MAINT "conference::maintenance"
 #define CONF_EVENT_CDR "conference::cdr"
+#define VAD_START_TAKING "vad::start_talking"
+#define VAD_STOP_TAKING "vad::stop_talking"
 #define CONF_DEFAULT_LEADIN 20
 
 #define CONF_DBLOCK_SIZE CONF_BUFFER_SIZE

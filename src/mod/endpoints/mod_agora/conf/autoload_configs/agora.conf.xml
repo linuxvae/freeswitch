@@ -1,0 +1,11 @@
+<configuration name="agora.conf" description="Agora Endpoint">
+  <profiles>
+	<profile name="default">
+		<settings>
+			<param name="appid" value="test" />
+			<param name="context" value="public" />
+			<param name="dialplan" value="XML" />
+		</settings>
+	</profile>
+  </profiles>
+</configuration>
