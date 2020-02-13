@@ -1927,6 +1927,7 @@ AC_CONFIG_FILES([Makefile
 		src/mod/endpoints/mod_portaudio/Makefile
 		src/mod/endpoints/mod_reference/Makefile
 		src/mod/endpoints/mod_rtmp/Makefile
+    src/mod/endpoints/mod_agora/Makefile
 		src/mod/endpoints/mod_skinny/Makefile
 		src/mod/endpoints/mod_sofia/Makefile
 		src/mod/endpoints/mod_unicall/Makefile
