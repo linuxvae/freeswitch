@@ -16,20 +16,20 @@ static FILE *g_out_fp = NULL;
 
 static void *SWITCH_THREAD_FUNC read_data_thread(switch_thread_t *thread, void *obj)
 {
-	unsigned char rdata[PCM_16000_16_1_SIZE]="";
+	unsigned char rdata[PCM_16000_16_1_SIZE] = "";
 	switch_size_t rlen = 0;
 	agora_session_t *session = (agora_session_t *)obj;
 	while (session->state != RS_DESTROY) {
-		rlen = fread(rdata,  1, PCM_16000_16_1_SIZE,g_fp);
+		rlen = fread(rdata, 1, PCM_16000_16_1_SIZE, g_fp);
 		if (rlen > 0) {
 			switch_mutex_lock(session->readbuf_mutex);
 			switch_buffer_write(session->readbuf, rdata, rlen);
 			switch_mutex_unlock(session->readbuf_mutex);
 		}
-		if(feof(g_fp)){
+		if (feof(g_fp)) {
 			fseek(g_fp, 0L, SEEK_SET);
 		}
-		switch_sleep(20000);
+		switch_sleep(19000);
 	}
 	return NULL;
 }
@@ -73,14 +73,16 @@ int agora_read_data_from_session(agora_session_t *session, switch_frame_t *read_
 	switch_mutex_lock(session->readbuf_mutex);
 	read_frame->datalen = switch_buffer_read(session->readbuf, read_frame->data, len);
 	switch_mutex_unlock(session->readbuf_mutex);
-	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "agora_read_data_from_session %d \n", read_frame->datalen);
+	// switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "agora_read_data_from_session %d \n",
+	// read_frame->datalen);
 	return read_frame->datalen;
 	//
 }
 int agora_write_data_to_session(agora_session_t *session, switch_frame_t *read_frame)
 {
 	switch_assert(session);
-	//switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "agora_write_data_to_session %d \n", read_frame->datalen);
+	// switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "agora_write_data_to_session %d \n",
+	// read_frame->datalen);
 	fwrite(read_frame->data, read_frame->datalen, 1, g_out_fp);
 	return 0;
 }
@@ -89,11 +91,16 @@ int agora_write_data_to_session(agora_session_t *session, switch_frame_t *read_f
 int agora_destory_session(agora_session_t *session)
 {
 	switch_status_t status;
+	//释放
 	if (session) {
-		//释放
-
+		if (session->state >= RS_DESTROY) {
+			return 0;
+		}
 		session->state = RS_DESTROY;
 		switch_thread_join(&status, session->thread);
+		switch_buffer_destroy(&session->readbuf);
+		switch_core_destroy_memory_pool(&session->pool);
+		session = NULL;
 	}
 	if (g_fp) {
 		fclose(g_fp);
@@ -103,8 +110,6 @@ int agora_destory_session(agora_session_t *session)
 		fclose(g_out_fp);
 		g_out_fp = NULL;
 	}
-	switch_buffer_destroy(&session->readbuf);
-	switch_core_destroy_memory_pool(&session->pool);
 	return 0;
 }
 

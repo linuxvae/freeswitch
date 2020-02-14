@@ -207,8 +207,7 @@ switch_status_t agora_tech_init(agora_private_t *tech_pvt, switch_core_session_t
 
 	switch_core_session_set_read_codec(session, &tech_pvt->read_codec);
 	switch_core_session_set_write_codec(session, &tech_pvt->write_codec);
-	tech_pvt->agora_session =
-		agora_init_session(tech_pvt->caller_profile->destination_number);
+	tech_pvt->agora_session = agora_init_session(tech_pvt->caller_profile->destination_number);
 	if (tech_pvt->agora_session == NULL) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Can't initialize write codec\n");
 		return SWITCH_STATUS_FALSE;
@@ -231,31 +230,30 @@ switch_status_t agora_tech_init(agora_private_t *tech_pvt, switch_core_session_t
 */
 switch_status_t agora_on_init(switch_core_session_t *session)
 {
-	// switch_channel_t *channel;
-	// agora_private_t *tech_pvt = NULL;
+	switch_channel_t *channel;
+	agora_private_t *tech_pvt = NULL;
 	// agora_session_t *rsession = NULL;
 
-	// tech_pvt = switch_core_session_get_private(session);
-	// assert(tech_pvt != NULL);
+	tech_pvt = switch_core_session_get_private(session);
+	assert(tech_pvt != NULL);
 
 	// rsession = tech_pvt->agora_session;
 
-	// channel = switch_core_session_get_channel(session);
-	// assert(channel != NULL);
+	channel = switch_core_session_get_channel(session);
+	assert(channel != NULL);
 
-	// switch_channel_set_flag(channel, CF_CNG_PLC);
+	switch_channel_set_flag(channel, CF_CNG_PLC);
 
-	// agora_notify_call_state(session);
+	agora_notify_call_state(session);
 
-	// switch_set_flag_locked(tech_pvt, TFLAG_IO);
+	switch_set_flag_locked(tech_pvt, TFLAG_IO);
 
-	// switch_mutex_lock(rsession->profile->mutex);
-	// rsession->profile->calls++;
-	// switch_mutex_unlock(rsession->profile->mutex);
+	switch_mutex_lock(tech_pvt->profile->mutex);
+	tech_pvt->profile->calls++;
+	switch_mutex_unlock(tech_pvt->profile->mutex);
 
-	// switch_mutex_lock(rsession->count_mutex);
-	// rsession->active_sessions++;
-	// switch_mutex_unlock(rsession->count_mutex);
+	switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "%s AGORA CHANNEL INIT\n",
+					  switch_channel_get_name(channel));
 
 	return SWITCH_STATUS_SUCCESS;
 }
@@ -272,7 +270,7 @@ switch_status_t agora_on_routing(switch_core_session_t *session)
 	assert(tech_pvt != NULL);
 
 	agora_notify_call_state(session);
-	switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "%s CHANNEL ROUTING\n",
+	switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "%s AGORA CHANNEL ROUTING\n",
 					  switch_channel_get_name(channel));
 
 	return SWITCH_STATUS_SUCCESS;
@@ -291,7 +289,7 @@ switch_status_t agora_on_execute(switch_core_session_t *session)
 	assert(tech_pvt != NULL);
 
 	agora_notify_call_state(session);
-	switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "%s CHANNEL EXECUTE\n",
+	switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "%s AGORA CHANNEL EXECUTE\n",
 					  switch_channel_get_name(channel));
 
 	return SWITCH_STATUS_SUCCESS;
@@ -318,19 +316,31 @@ switch_status_t agora_on_destroy(switch_core_session_t *session)
 
 		// switch_core_timer_destroy(&tech_pvt->timer);
 		agora_destory_session(tech_pvt->agora_session);
-	}
 
+		switch_core_hash_delete_wrlock(tech_pvt->profile->agora_pvt_hash, switch_core_session_get_uuid(session),
+									   tech_pvt->profile->agora_pvt_rwlock);
+
+		switch_mutex_lock(tech_pvt->profile->mutex);
+		if (tech_pvt->profile->calls < 1) {
+			tech_pvt->profile->calls = 0;
+		} else {
+			tech_pvt->profile->calls--;
+		}
+		switch_mutex_unlock(tech_pvt->profile->mutex);
+	}
+	switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "%s AGORA CHANNEL DESTORY\n",
+					  switch_channel_get_name(channel));
 	return SWITCH_STATUS_SUCCESS;
 }
 
 switch_status_t agora_on_hangup(switch_core_session_t *session)
 {
-	// switch_channel_t *channel = NULL;
+	switch_channel_t *channel = NULL;
 	// agora_private_t *tech_pvt = NULL;
 	// agora_session_t *rsession = NULL;
 
-	// channel = switch_core_session_get_channel(session);
-	// assert(channel != NULL);
+	channel = switch_core_session_get_channel(session);
+	assert(channel != NULL);
 
 	// tech_pvt = switch_core_session_get_private(session);
 	// assert(tech_pvt != NULL);
@@ -405,6 +415,8 @@ switch_status_t agora_on_hangup(switch_core_session_t *session)
 	// 	switch_thread_rwlock_unlock(rsession->rwlock);
 
 	// done:
+	switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "%s AGORA CHANNEL HUGUP\n",
+					  switch_channel_get_name(channel));
 	return SWITCH_STATUS_SUCCESS;
 }
 
@@ -436,14 +448,14 @@ switch_status_t agora_kill_channel(switch_core_session_t *session, int sig)
 
 switch_status_t agora_on_exchange_media(switch_core_session_t *session)
 {
-	switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "CHANNEL LOOPBACK\n");
+	switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "AGORA CHANNEL LOOPBACK\n");
 	agora_notify_call_state(session);
 	return SWITCH_STATUS_SUCCESS;
 }
 
 switch_status_t agora_on_soft_execute(switch_core_session_t *session)
 {
-	switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "CHANNEL TRANSMIT\n");
+	switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "AGORA CHANNEL TRANSMIT\n");
 	agora_notify_call_state(session);
 	return SWITCH_STATUS_SUCCESS;
 }
@@ -453,6 +465,7 @@ switch_status_t agora_send_dtmf(switch_core_session_t *session, const switch_dtm
 	agora_private_t *tech_pvt = switch_core_session_get_private(session);
 	switch_assert(tech_pvt != NULL);
 
+	switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "AGORA CHANNEL DTMF %d\n", dtmf->digit);
 	return SWITCH_STATUS_SUCCESS;
 }
 
@@ -475,7 +488,7 @@ switch_status_t agora_read_frame(switch_core_session_t *session, switch_frame_t 
 	assert(tech_pvt != NULL);
 	rsession = tech_pvt->agora_session;
 
-	if (rsession->state >= RS_DESTROY) {
+	if (rsession == NULL || rsession->state >= RS_DESTROY) {
 		return SWITCH_STATUS_FALSE;
 	}
 
@@ -573,6 +586,10 @@ switch_status_t agora_receive_message(switch_core_session_t *session, switch_cor
 
 	channel = switch_core_session_get_channel(session);
 	assert(channel != NULL);
+
+	switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR,
+					  "%s AGORA CHANNEL agora_receive_message：%d\n", switch_channel_get_name(channel),
+					  msg->message_id);
 
 	tech_pvt = (agora_private_t *)switch_core_session_get_private(session);
 	assert(tech_pvt != NULL);
@@ -682,6 +699,7 @@ switch_call_cause_t agora_outgoing_channel(switch_core_session_t *session, switc
 										   switch_originate_flag_t flags, switch_call_cause_t *cancel_cause)
 {
 	agora_private_t *tech_pvt;
+	agora_profile_t *profile;
 	switch_caller_profile_t *caller_profile;
 	switch_channel_t *channel;
 	switch_call_cause_t cause = SWITCH_CAUSE_DESTINATION_OUT_OF_ORDER;
@@ -721,22 +739,26 @@ switch_call_cause_t agora_outgoing_channel(switch_core_session_t *session, switc
 	tech_pvt->session = *newsession;
 	tech_pvt->caller_profile = caller_profile;
 	switch_core_session_add_stream(*newsession, NULL);
-	tech_pvt->profile = agora_profile_locate(destination);
-
+	profile = agora_profile_locate(destination);
+	if (profile == NULL) {
+		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(*newsession), SWITCH_LOG_ERROR, "%s profile is failed failed\n", destination);
+		cause = SWITCH_CAUSE_DESTINATION_OUT_OF_ORDER;
+		goto fail;
+	}
+	tech_pvt->profile = profile;
 	if (agora_tech_init(tech_pvt, *newsession) != SWITCH_STATUS_SUCCESS) {
 		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(*newsession), SWITCH_LOG_ERROR, "tech_init failed\n");
 		cause = SWITCH_CAUSE_DESTINATION_OUT_OF_ORDER;
 		goto fail;
 	}
-
+	switch_core_hash_insert_wrlock(profile->agora_pvt_hash, switch_core_session_get_uuid(*newsession), tech_pvt,
+								   profile->agora_pvt_rwlock);
 	if (!zstr(auth)) {
 		tech_pvt->auth = switch_core_session_strdup(*newsession, auth);
 		switch_split_user_domain(auth, &user, &domain);
 		tech_pvt->auth_user = switch_core_session_strdup(*newsession, user);
 		tech_pvt->auth_domain = switch_core_session_strdup(*newsession, domain);
 	}
-
-	
 
 	switch_channel_ring_ready(channel);
 	// agora_send_incoming_call(*newsession, var_event); //todo 通知别人有电话进来
@@ -769,6 +791,14 @@ switch_status_t agora_receive_event(switch_core_session_t *session, switch_event
 	// switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Session", switch_core_session_get_uuid(session));
 
 	// agora_send_event(rsession, event);
+
+	switch_channel_t *channel = NULL;
+
+	channel = switch_core_session_get_channel(session);
+	assert(channel != NULL);
+
+	switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR,
+					  "%s AGORA CHANNEL agora_receive_event:%s \n", switch_channel_get_name(channel), event->body);
 
 	return SWITCH_STATUS_SUCCESS;
 }
@@ -847,21 +877,6 @@ static void agora_garbage_colletor(void)
 	// 	switch_safe_free(hi);
 
 	// 	switch_thread_rwlock_unlock(agora_globals.session_rwlock);
-}
-
-switch_status_t agora_session_destroy(agora_session_t **rsession)
-{
-	switch_status_t status = SWITCH_STATUS_FALSE;
-
-	switch_mutex_lock(agora_globals.mutex);
-	if (rsession && *rsession) {
-		(*rsession)->state = RS_DESTROY;
-		*rsession = NULL;
-		status = SWITCH_STATUS_SUCCESS;
-	}
-	switch_mutex_unlock(agora_globals.mutex);
-
-	return status;
 }
 
 switch_status_t agora_real_session_destroy(agora_session_t **rsession)
@@ -1090,30 +1105,56 @@ switch_status_t agora_profile_destroy(agora_profile_t **profile)
 {
 	// int sanity = 0;
 	switch_hash_index_t *hi = NULL;
+	agora_private_t *tech_pvt = NULL;
+	agora_session_t *rsession = NULL;
+	int sess = 0;
 	switch_xml_config_item_t *instructions = get_instructions(*profile);
 	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "Stopping profile: %s\n", (*profile)->name);
 
 	switch_core_hash_delete_wrlock(agora_globals.profile_hash, (*profile)->name, agora_globals.profile_rwlock);
 
-	switch_thread_rwlock_wrlock((*profile)->rwlock);
+	switch_thread_rwlock_wrlock((*profile)->agora_pvt_rwlock);
 
 	/* Kill all sessions */
-	while ((hi = switch_core_hash_first_iter((*profile)->agora_pvt_hash, hi))) {
+	for (hi = switch_core_hash_first((*profile)->agora_pvt_hash); hi; hi = switch_core_hash_next(&hi)) {
+					
 		void *val;
-		agora_session_t *rsession;
 		const void *key;
 		switch_ssize_t keylen;
+		switch_channel_t *channel;
+		switch_core_session_t *session;
+
 		switch_core_hash_this(hi, &key, &keylen, &val);
+		session = (switch_core_session_t *)val;
+		/* If there are any sessions attached, abort the destroy operation */
+		if ((session = switch_core_session_locate((char *)key)) != NULL) {
+			channel = switch_core_session_get_channel(session);
 
-		rsession = val;
-
-		if (rsession->state != RS_DESTROY) agora_session_destroy(&rsession);
+			switch_channel_hangup(channel, SWITCH_CAUSE_DESTINATION_OUT_OF_ORDER);
+			switch_core_session_rwunlock(session);
+			//删除所有session
+			tech_pvt = switch_core_session_get_private(session);
+			assert(tech_pvt != NULL);
+			rsession = tech_pvt->agora_session;
+			agora_destory_session(rsession);
+			sess++;
+		}
+	}
+	switch_thread_rwlock_unlock((*profile)->agora_pvt_rwlock);
+	if (sess) {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG1, "Agora profile [%s] still busy.\n", (*profile)->name);
+		return SWITCH_STATUS_FALSE;
 	}
 
-	switch_thread_rwlock_unlock((*profile)->rwlock);
+	while ((*profile)->calls > 0) {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Waiting for thread to end\n");
+		switch_yield(500000);
+	}
+
+	agora_release_module(); // todo fixme
 
 	switch_xml_config_cleanup(instructions);
-
+	switch_core_hash_destroy(&(*profile)->agora_pvt_hash);
 	switch_core_destroy_memory_pool(&(*profile)->pool);
 
 	free(instructions);
@@ -1277,8 +1318,7 @@ done:
 // }
 
 #define agora_FUNCTION_SYNTAX                                                                                          \
-	"profile [profilename] [start | stop | rescan | restart]\nstatus profile [profilename]\nstatus profile "           \
-	"[profilename] [reg | sessions]\nsession [session_id] [kill | login [user@domain] | logout [user@domain]]"
+	"profile [profilename] [start | stop | rescan | restart]\nstatus profile [profilename]\nstatus profile "
 SWITCH_STANDARD_API(agora_function)
 {
 	int argc;
@@ -1295,214 +1335,107 @@ SWITCH_STANDARD_API(agora_function)
 	if (argc < 1 || zstr(argv[0])) {
 		goto usage;
 	}
-	/*
-		if (!strcmp(argv[0], "profile")) {
-			if (zstr(argv[1]) || zstr(argv[2])) {
-				goto usage;
-			}
-			if (!strcmp(argv[2], "start")) {
-				agora_profile_t *profile = agora_profile_locate(argv[1]);
-				if (profile) {
-					agora_profile_release(profile);
-					stream->write_function(stream, "-ERR Profile %s is already started\n", argv[2]);
-				} else {
-					agora_profile_start(argv[1]);
-					stream->write_function(stream, "+OK\n");
-				}
-			} else if (!strcmp(argv[2], "stop")) {
-				agora_profile_t *profile = agora_profile_locate(argv[1]);
-				if (profile) {
-					agora_profile_release(profile);
-					agora_profile_destroy(&profile);
-					stream->write_function(stream, "+OK\n");
-				} else {
-					stream->write_function(stream, "-ERR No such profile\n");
-				}
-			} else if (!strcmp(argv[2], "rescan")) {
-				agora_profile_t *profile = agora_profile_locate(argv[1]);
-				if (profile) {
-					if (config_profile(profile, SWITCH_TRUE) == SWITCH_STATUS_SUCCESS) {
-						stream->write_function(stream, "+OK\n");
-					} else {
-						stream->write_function(stream, "-ERR Config error\n");
-					}
-					agora_profile_release(profile);
-				}
-			} else if (!strcmp(argv[2], "restart")) {
-				agora_profile_t *profile = agora_profile_locate(argv[1]);
-				if (profile) {
-					agora_profile_release(profile);
-					agora_profile_destroy(&profile);
-					agora_profile_start(argv[1]);
-					stream->write_function(stream, "+OK\n");
-				} else {
-					agora_profile_start(argv[1]);
-					stream->write_function(stream, "-OK (wasn't started, started anyways)\n");
-				}
+
+	if (!strcmp(argv[0], "profile")) {
+		if (zstr(argv[1]) || zstr(argv[2])) {
+			goto usage;
+		}
+		if (!strcmp(argv[2], "start")) {
+			agora_profile_t *profile = agora_profile_locate(argv[1]);
+			if (profile) {
+				agora_profile_release(profile);
+				stream->write_function(stream, "-ERR Profile %s is already started\n", argv[2]);
 			} else {
-				goto usage;
-			}
-		} else if (!strcmp(argv[0], "status")) {
-			if (!zstr(argv[1]) && !strcmp(argv[1], "profile") && !zstr(argv[2])) {
-				agora_profile_t *profile;
-
-				if ((profile = agora_profile_locate(argv[2]))) {
-					stream->write_function(stream, "Profile: %s\n", profile->name);
-					stream->write_function(stream, "I/O Backend: %s\n", profile->io->name);
-					stream->write_function(stream, "Bind address: %s\n", profile->io->address);
-					stream->write_function(stream, "Active calls: %d\n", profile->calls);
-
-					if (!zstr(argv[3]) && !strcmp(argv[3], "sessions")) {
-						switch_hash_index_t *hi;
-						stream->write_function(stream, "\nSessions:\n");
-						stream->write_function(stream, "uuid,address,user,domain,flashVer,state\n");
-						switch_thread_rwlock_rdlock(profile->session_rwlock);
-						for (hi = switch_core_hash_first(profile->session_hash); hi; hi = switch_core_hash_next(&hi)) {
-							void *val;
-							const void *key;
-							switch_ssize_t keylen;
-							agora_session_t *item;
-							switch_core_hash_this(hi, &key, &keylen, &val);
-
-							item = (agora_session_t *)val;
-							stream->write_function(stream, "%s,%s:%d,%s,%s,%s,%s\n", item->uuid, item->remote_address,
-												   item->remote_port, item->account ? item->account->user : NULL,
-												   item->account ? item->account->domain : NULL, item->flashVer,
-												   state2name(item->state));
-						}
-						switch_thread_rwlock_unlock(profile->session_rwlock);
-					} else if (!zstr(argv[3]) && !strcmp(argv[3], "reg")) {
-						switch_hash_index_t *hi;
-						stream->write_function(stream, "\nRegistrations:\n");
-						stream->write_function(stream, "user,nickname,uuid\n");
-
-						switch_thread_rwlock_rdlock(profile->reg_rwlock);
-						for (hi = switch_core_hash_first(profile->reg_hash); hi; hi = switch_core_hash_next(&hi)) {
-							void *val;
-							const void *key;
-							switch_ssize_t keylen;
-							agora_reg_t *item;
-							switch_core_hash_this(hi, &key, &keylen, &val);
-
-							item = (agora_reg_t *)val;
-							for (; item; item = item->next) {
-								stream->write_function(stream, "%s,%s,%s\n", key, switch_str_nil(item->nickname),
-													   item->uuid);
-							}
-						}
-						switch_thread_rwlock_unlock(profile->reg_rwlock);
-					} else {
-						stream->write_function(stream, "Dialplan: %s\n", profile->dialplan);
-						stream->write_function(stream, "Context: %s\n", profile->context);
-					}
-
-					agora_profile_release(profile);
-				} else {
-					stream->write_function(stream, "-ERR No such profile [%s]\n", argv[2]);
-				}
-			} else {
-				switch_hash_index_t *hi = NULL;
-				switch_thread_rwlock_rdlock(agora_globals.profile_rwlock);
-				for (hi = switch_core_hash_first_iter(agora_globals.profile_hash, hi); hi;
-					 hi = switch_core_hash_next(&hi)) {
-					void *val;
-					const void *key;
-					switch_ssize_t keylen;
-					agora_profile_t *item;
-					switch_core_hash_this(hi, &key, &keylen, &val);
-
-					item = (agora_profile_t *)val;
-					stream->write_function(stream, "%s\t%s:%s\tprofile\n", item->name, item->io->name,
-	   item->io->address);
-				}
-				switch_thread_rwlock_unlock(agora_globals.profile_rwlock);
-			}
-
-		} else if (!strcmp(argv[0], "session")) {
-			agora_session_t *rsession;
-
-			if (zstr(argv[1]) || zstr(argv[2])) {
-				goto usage;
-			}
-
-			rsession = agora_session_locate(argv[1]);
-			if (!rsession) {
-				stream->write_function(stream, "-ERR No such session\n");
-				goto done;
-			}
-
-			if (!strcmp(argv[2], "login")) {
-				char *user, *domain;
-				if (zstr(argv[3])) {
-					goto usage;
-				}
-				switch_split_user_domain(argv[3], &user, &domain);
-
-				if (!zstr(user) && !zstr(domain)) {
-					agora_session_login(rsession, user, domain);
-					stream->write_function(stream, "+OK\n");
-				} else {
-					stream->write_function(stream, "-ERR I need user@domain\n");
-				}
-			} else if (!strcmp(argv[2], "logout")) {
-				char *user, *domain;
-				if (zstr(argv[3])) {
-					goto usage;
-				}
-				switch_split_user_domain(argv[3], &user, &domain);
-
-				if (!zstr(user) && !zstr(domain)) {
-					agora_session_logout(rsession, user, domain);
-					stream->write_function(stream, "+OK\n");
-				} else {
-					stream->write_function(stream, "-ERR I need user@domain\n");
-				}
-			} else if (!strcmp(argv[2], "kill")) {
-				agora_session_rwunlock(rsession);
-				agora_session_destroy(&rsession);
+				agora_profile_start(argv[1]);
 				stream->write_function(stream, "+OK\n");
-			} else if (!strcmp(argv[2], "call")) {
-				switch_core_session_t *newsession = NULL;
-				char *dest = argv[3];
-				char *user = argv[4];
-				char *domain = NULL;
-
-				if (!zstr(user) && (domain = strchr(user, '@'))) {
-					*domain++ = '\0';
-				}
-
-				if (!zstr(dest)) {
-					if (agora_session_create_call(rsession, &newsession, 0, agora_DEFAULT_STREAM_AUDIO, dest, user,
-	   domain,
-												  NULL) != SWITCH_CAUSE_SUCCESS) {
-						stream->write_function(stream, "-ERR Couldn't create new call\n");
-					} else {
-						agora_private_t *new_pvt = switch_core_session_get_private(newsession);
-						agora_send_invoke_free(rsession, 3, 0, 0, amf0_str("onMakeCall"), amf0_number_new(0),
-											   amf0_null_new(), amf0_str(switch_core_session_get_uuid(newsession)),
-											   amf0_str(switch_str_nil(dest)), amf0_str(switch_str_nil(new_pvt->auth)),
-											   NULL);
-
-						agora_attach_private(rsession, switch_core_session_get_private(newsession));
-						stream->write_function(stream, "+OK\n");
-					}
-				} else {
-					stream->write_function(stream, "-ERR Missing destination number\n");
-				}
-			} else if (!strcmp(argv[2], "ping")) {
-				agora_ping(rsession);
+			}
+		} else if (!strcmp(argv[2], "stop")) {
+			agora_profile_t *profile = agora_profile_locate(argv[1]);
+			if (profile) {
+				agora_profile_release(profile);
+				agora_profile_destroy(&profile);
 				stream->write_function(stream, "+OK\n");
 			} else {
-				stream->write_function(stream, "-ERR No such session action [%s]\n", argv[2]);
+				stream->write_function(stream, "-ERR No such profile\n");
 			}
-
-			if (rsession) {
-				agora_session_rwunlock(rsession);
+		} else if (!strcmp(argv[2], "rescan")) {
+			agora_profile_t *profile = agora_profile_locate(argv[1]);
+			if (profile) {
+				if (config_profile(profile, SWITCH_TRUE) == SWITCH_STATUS_SUCCESS) {
+					stream->write_function(stream, "+OK\n");
+				} else {
+					stream->write_function(stream, "-ERR Config error\n");
+				}
+				agora_profile_release(profile);
+			}
+		} else if (!strcmp(argv[2], "restart")) {
+			agora_profile_t *profile = agora_profile_locate(argv[1]);
+			if (profile) {
+				agora_profile_release(profile);
+				agora_profile_destroy(&profile);
+				agora_profile_start(argv[1]);
+				stream->write_function(stream, "+OK\n");
+			} else {
+				agora_profile_start(argv[1]);
+				stream->write_function(stream, "-OK (wasn't started, started anyways)\n");
 			}
 		} else {
 			goto usage;
 		}
-		*/
+	} else if (!strcmp(argv[0], "status")) {
+		if (!zstr(argv[1]) && !strcmp(argv[1], "profile") && !zstr(argv[2])) {
+			agora_profile_t *profile;
+
+			if ((profile = agora_profile_locate(argv[2]))) {
+				stream->write_function(stream, "Profile: %s\n", profile->name);
+				stream->write_function(stream, "APPID: %s\n", profile->appid);
+				stream->write_function(stream, "Active calls: %d\n", profile->calls);
+
+				if (!zstr(argv[3]) && !strcmp(argv[3], "sessions")) {
+					switch_hash_index_t *hi;
+					stream->write_function(stream, "\nSessions:\n");
+					stream->write_function(stream, "uuid,destination_number,caller_id_number,caller_id_name,state\n");
+					switch_thread_rwlock_rdlock(profile->agora_pvt_rwlock);
+					for (hi = switch_core_hash_first(profile->agora_pvt_hash); hi; hi = switch_core_hash_next(&hi)) {
+						void *val;
+						const void *key;
+						switch_ssize_t keylen;
+						agora_private_t *tech_pvt;
+						switch_core_hash_this(hi, &key, &keylen, &val);
+
+						tech_pvt = (agora_private_t *)val;
+						stream->write_function(stream, "%s,%s:%s,%s,%d \n", tech_pvt->caller_profile->uuid,
+											   tech_pvt->caller_profile->destination_number,
+											   tech_pvt->caller_profile->caller_id_number,
+											   tech_pvt->caller_profile->caller_id_name, tech_pvt->flags);
+					}
+					switch_thread_rwlock_unlock(profile->agora_pvt_rwlock);
+				} else {
+					stream->write_function(stream, "Dialplan: %s\n", profile->dialplan);
+					stream->write_function(stream, "Context: %s\n", profile->context);
+				}
+				agora_profile_release(profile);
+			} else {
+				stream->write_function(stream, "-ERR No such profile [%s]\n", argv[2]);
+			}
+		} else {
+			switch_hash_index_t *hi = NULL;
+			switch_thread_rwlock_rdlock(agora_globals.profile_rwlock);
+			for (hi = switch_core_hash_first_iter(agora_globals.profile_hash, hi); hi;
+				 hi = switch_core_hash_next(&hi)) {
+				void *val;
+				const void *key;
+				switch_ssize_t keylen;
+				agora_profile_t *item;
+				switch_core_hash_this(hi, &key, &keylen, &val);
+
+				item = (agora_profile_t *)val;
+				stream->write_function(stream, "%s profile :\tcontext:%s APPID:%s\t\n", item->name, item->context,
+									   item->appid);
+			}
+			switch_thread_rwlock_unlock(agora_globals.profile_rwlock);
+		}
+	}
 	goto done;
 
 usage:
@@ -1584,7 +1517,6 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_agora_load)
 	switch_console_set_complete("add agora status");
 	switch_console_set_complete("add agora status profile ::agora::list_profiles");
 	switch_console_set_complete("add agora status profile ::agora::list_profiles sessions");
-	switch_console_set_complete("add agora status profile ::agora::list_profiles reg");
 	switch_console_set_complete("add agora profile ::agora::list_profiles start");
 	switch_console_set_complete("add agora profile ::agora::list_profiles stop");
 	switch_console_set_complete("add agora profile ::agora::list_profiles restart");
