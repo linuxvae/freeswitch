@@ -34,11 +34,11 @@
 #include "agora.h"
 #define AGORA_EVENT_CUSTOM "agora::custom"
 
-SWITCH_MODULE_LOAD_FUNCTION(mod_agora_load);
+SWITCH_BEGIN_EXTERN_C SWITCH_MODULE_LOAD_FUNCTION(mod_agora_load);
 SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_agora_shutdown);
 SWITCH_MODULE_RUNTIME_FUNCTION(mod_agora_runtime);
 SWITCH_MODULE_DEFINITION(mod_agora, mod_agora_load, mod_agora_shutdown, mod_agora_runtime);
-
+SWITCH_END_EXTERN_C
 typedef enum {
 	TFLAG_IO = (1 << 0),
 	TFLAG_DETACHED = (1 << 1), /* Call isn't the current active call */
