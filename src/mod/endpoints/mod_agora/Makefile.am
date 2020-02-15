@@ -1,6 +1,6 @@
 include $(top_srcdir)/build/modmake.rulesam
 MODNAME=mod_agora
-LIBPATH=./libs
+LIBPATH=libs
 mod_LTLIBRARIES = mod_agora.la
 mod_agora_la_SOURCES  = mod_agora.cpp agora.cpp AudioFrameObserver.cpp
 #mod_agora_la_SOURCES += libamf/src/amf0.c libamf/src/hash.c libamf/src/io.c libamf/src/ptrarray.c libamf/src/types.c 

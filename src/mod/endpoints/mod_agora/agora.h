@@ -24,6 +24,9 @@ using namespace agora::rtc;
 
 typedef enum { INIT = 0, JOINED = 1, RS_DESTROY = 2 } agora_session_state_t;
 
+class AudioFrameObserver;
+
+
 struct agora_session {
 	switch_memory_pool_t * pool;
     unsigned char databuf[SWITCH_RECOMMENDED_BUFFER_SIZE]; /* < Buffer for read_frame */

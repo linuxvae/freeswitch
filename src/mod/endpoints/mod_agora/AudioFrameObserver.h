@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include "agora.h"
 
+typedef struct agora_session agora_session_t;
+
 class AudioFrameObserver : public agora::media::IAudioFrameObserver
 {
 public:
