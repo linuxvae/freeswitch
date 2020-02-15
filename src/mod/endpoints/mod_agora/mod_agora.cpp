@@ -123,7 +123,8 @@ static switch_xml_config_item_t *get_instructions(agora_profile_t *profile);
 
 void agora_notify_call_state(switch_core_session_t *session)
 {
-	// todo
+    //start to init agora sdk
+
 }
 
 switch_state_handler_table_t agora_state_handlers = {
