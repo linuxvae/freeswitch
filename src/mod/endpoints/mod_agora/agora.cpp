@@ -1,6 +1,5 @@
 #include "agora.h"
 #include "IAgoraRtcEngine.h"
-#include "AGEngine.h"
 #include "AudioFrameObserver.h"
 #include "IAgoraMediaEngine.h"
 #include <stdio.h>
@@ -59,28 +58,29 @@ agora_session_t *agora_init_session(char *channelID)
     RtcEngineContext ctx;
     ctx.eventHandler = NULL; //here can set status change callback
     ctx.appId = "fe4b413a89e2440296df19089e518041";
-    m_agoraEngine->initialize(ctx);
-    mediaEngine.queryInterface(m_agoraEngine, agora::AGORA_IID_MEDIA_ENGINE);
-    session->m_parameters = new RtcEngineParameters(m_agoraEngine);
+    session->m_agoraEngine->initialize(ctx);
+    session->mediaEngine.queryInterface(session->m_agoraEngine, agora::AGORA_IID_MEDIA_ENGINE);
+    session->m_parameters = new RtcEngineParameters(session->m_agoraEngine);
 
     //media basic setup 
     session->m_agoraEngine->enableAudio();
     session->m_parameters->muteLocalAudioStream(0);
     session->m_agoraEngine->setAudioProfile((AUDIO_PROFILE_TYPE)0, (AUDIO_SCENARIO_TYPE)0);
-    session->m_engine->enableWebSdkInteroperability(0);
+    session->m_parameters->enableWebSdkInteroperability(0);
 	
 	//enable external audio source
-    session->m_parameters->setExternalAudioSource(true, nSampleRate, nChannels);
+    session->m_parameters->setExternalAudioSource(true, /*nSampleRate*/16000, /*nChannels*/1);
     
 
 	//set audioFrame receive parameter and callback observer
-	session->m_engine->setPlaybackAudioFrameParameters(/*sampleRate*/16000, /*channel*/1,
+	session->m_parameters->setPlaybackAudioFrameParameters(/*sampleRate*/16000, /*channel*/1,
 													  /*mode*/RAW_AUDIO_FRAME_OP_MODE_READ_ONLY, /*samplespercall*/16000/50);
     session->audioFrameObserver = new AudioFrameObserver(session);
     session->mediaEngine->registerAudioFrameObserver(session->audioFrameObserver);
 
 	//join channel
-    session->m_engine->joinChannel(/*dynamicKey*/NULL, /*channelId*/channelID, /*uid*/"fs_test"); 
+    //session->m_agoraEngine->joinChannel(/*dynamicKey*/NULL, /*channelId*/channelID, /*info*/NULL, /*uid*/"fs_test"); 
+    session->m_agoraEngine->joinChannel(/*dynamicKey*/NULL, /*channelId*/"w123", /*info*/NULL, /*uid*/"fs_test"); 
 
     //init agora done;
 
