@@ -1,6 +1,4 @@
-
-#ifndef INCLUDE_AGORA_H
-#define INCLUDE_AGORA_H
+#pragma once
 
 #include <switch.h>
 #include <switch_types.h>
@@ -10,6 +8,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include "AudioFrameObserver.h"
+#include "AgoraBase.h"
+#include "IAgoraMediaEngine.h"
 
 namespace agora {
     namespace rtc {
@@ -18,6 +18,8 @@ namespace agora {
         class RtcEngineParameters;
     }
 }
+
+using namespace agora::rtc;
 
 
 typedef enum { INIT = 0, JOINED = 1, RS_DESTROY = 2 } agora_session_state_t;
@@ -50,4 +52,3 @@ int agora_write_data_to_session(agora_session_t * session, switch_frame_t *read_
 int agora_destory_session(agora_session_t * session);
 int agora_release_module();
 
-#endif
