@@ -9,6 +9,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "AudioFrameObserver.h"
+
+namespace agora {
+    namespace rtc {
+        class IRtcEngineEventHandler;
+        class IRtcEngine;
+        class RtcEngineParameters;
+    }
+}
+
 
 typedef enum { INIT = 0, JOINED = 1, RS_DESTROY = 2 } agora_session_state_t;
 
@@ -21,6 +31,12 @@ struct agora_session {
 	switch_thread_rwlock_t *rwlock;
 	switch_thread_t *thread;
 	uint32_t flags;
+
+    //agora 
+    IRtcEngine*     m_agoraEngine;
+    RtcEngineParameters* m_parameters;
+    agora::util::AutoPtr<agora::media::IMediaEngine> mediaEngine;
+    AudioFrameObserver *audioFrameObserver;
 };
 typedef struct agora_session agora_session_t;
 
