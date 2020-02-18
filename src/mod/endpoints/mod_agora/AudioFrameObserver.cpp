@@ -7,6 +7,7 @@ bool AudioFrameObserver::onRecordAudioFrame(AudioFrame& audioFrame)
 return true;
 }
 
+
 bool AudioFrameObserver::onPlaybackAudioFrame(AudioFrame& audioFrame) 
 {
 	//printf("%s: bytesPerSamples=%d, channel=%d, renderTime=%d, samples=%d,  samplePerSec=%d\n", __FUNCTION__, 
@@ -17,9 +18,12 @@ bool AudioFrameObserver::onPlaybackAudioFrame(AudioFrame& audioFrame)
     //fclose(fd);
 
 
-    //copy audio frame to session->buff 
-	switch_assert(session);
-    switch_buffer_write(session->readbuf, audioFrame.buffer, audioFrame.samples * audioFrame.bytesPerSample * audioFrame.channels);
+ 	//copy audio frame to session->buff 
+	//FIXME, session might be destroyed here when callback
+
+	//callback 
+	write_data_callback(user_data, audioFrame.buffer, audioFrame.samples * audioFrame.bytesPerSample * audioFrame.channels);
+
 	return true;
 }
 
