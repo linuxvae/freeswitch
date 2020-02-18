@@ -197,7 +197,7 @@ switch_status_t agora_tech_init(agora_private_t *tech_pvt, switch_core_session_t
 	}
 
 	if (switch_core_codec_init(&tech_pvt->write_codec, /* name */ "L16", /* modname */ NULL,
-							   /* fmtp */ NULL, /* rate */ 16000, /* ms */ 20, /* channels */ 1,
+							   /* fmtp */ NULL, /* rate */ 32000, /* ms */ 10, /* channels */ 1,
 							   /* flags */ SWITCH_CODEC_FLAG_ENCODE | SWITCH_CODEC_FLAG_DECODE,
 							   /* codec settings */ NULL,
 							   switch_core_session_get_pool(session)) != SWITCH_STATUS_SUCCESS) {

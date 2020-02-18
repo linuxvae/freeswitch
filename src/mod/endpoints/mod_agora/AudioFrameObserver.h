@@ -2,16 +2,18 @@
 
 #include "IAgoraMediaEngine.h"
 #include <stdio.h>
-#include "agora.h"
 
-typedef struct agora_session agora_session_t;
+typedef void (*write_data_callback_t )(void *dst, void *src, int len);
+
 
 class AudioFrameObserver : public agora::media::IAudioFrameObserver
 {
 public:
     AudioFrameObserver();
 
-    AudioFrameObserver(agora_session_t *session_ptr): session(session_ptr){};
+    AudioFrameObserver(write_data_callback_t callback, void *userdata): write_data_callback(callback), 
+																		user_data(userdata){};
+
 
 	virtual bool onRecordAudioFrame(AudioFrame& audioFrame) ;
 	virtual bool onPlaybackAudioFrame(AudioFrame& audioFrame) ;
@@ -21,5 +23,6 @@ public:
 	virtual bool onPlaybackAudioFrameBeforeMixing(unsigned int uid, AudioFrame& audioFrame) ;
 	
 private:
-    agora_session_t *session;
+    void *user_data;
+	write_data_callback_t write_data_callback;
 };
