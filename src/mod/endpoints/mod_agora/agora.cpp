@@ -54,8 +54,8 @@ public:
 		config.decryptionMode =  NULL;
 
 		//default is random value/option
-		config.lowUdpPort = 0; //what is the work of it?
-		config.highUdpPort = 0;
+		config.lowUdpPort = 10002; //what is the work of it?
+		config.highUdpPort = 19000;
 		//default 5 (Video snapshot interval (second))
 		config.captureInterval = 5;
 
@@ -113,7 +113,7 @@ void write_frame_callback(void *dst, void *src, int len){
 	if(session && session->state == JOINED ){
 		
 		switch_mutex_lock(session->readbuf_mutex);
-			fwrite(src, 1, len ,g_receive_fp);
+			//fwrite(src, 1, len ,g_receive_fp);
 			/*
 			if(g_48pcm == NULL)
 				g_48pcm = fopen("/root/media/32k.pcm", "rb");
@@ -128,7 +128,7 @@ void write_frame_callback(void *dst, void *src, int len){
 
 			switch_buffer_write(session->readbuf, src, len);
 			//switch_buffer_write(session->readbuf, buf, buflen);
-			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR,"recv data %d bytes\n", len);		
+			//switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR,"recv data %d bytes\n", len);		
 
 		switch_mutex_unlock(session->readbuf_mutex);
 	}
@@ -139,7 +139,7 @@ void write_frame_callback(void *dst, void *src, int len){
 
 int agora_init_module(const char *appid) { return 0; }
 
-agora_session_t *agora_init_session(char *channelID)
+agora_session_t *agora_init_session(int src_number, char *channelID)
 {
 
 	switch_memory_pool_t *pool = NULL;
@@ -157,7 +157,7 @@ agora_session_t *agora_init_session(char *channelID)
 	session->agora_ctx = agora_ctx;
 	agora_ctx->setReceiveAudioCallback(session, write_frame_callback);
 	if( !agora_ctx->create_channel(/*appId*/"fe4b413a89e2440296df19089e518041", /*channelKey*/"",
-						 			"w123", /*uid*/201)){
+						 			"w123", /*uid*/src_number)){
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "join channel failed\n");
 	}
 	else{
@@ -181,8 +181,8 @@ int agora_read_data_from_session(agora_session_t *session, switch_frame_t *read_
 		read_frame->datalen = switch_buffer_read(session->readbuf, read_frame->data, len);
 
 	switch_mutex_unlock(session->readbuf_mutex);
-	 switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "agora_read_data_from_session %d \n",
-	 read_frame->datalen);
+	 //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "agora_read_data_from_session %d \n",
+	 //read_frame->datalen);
 	return read_frame->datalen;
 	
 }

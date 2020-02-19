@@ -208,7 +208,7 @@ switch_status_t agora_tech_init(agora_private_t *tech_pvt, switch_core_session_t
 
 	switch_core_session_set_read_codec(session, &tech_pvt->read_codec);
 	switch_core_session_set_write_codec(session, &tech_pvt->write_codec);
-	tech_pvt->agora_session = agora_init_session(tech_pvt->caller_profile->destination_number);
+	tech_pvt->agora_session = agora_init_session(atoi(tech_pvt->caller_profile->username) ,tech_pvt->caller_profile->destination_number);
 	if (tech_pvt->agora_session == NULL) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Can't initialize write codec\n");
 		return SWITCH_STATUS_FALSE;
