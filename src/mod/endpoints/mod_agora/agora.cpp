@@ -1,8 +1,6 @@
 #include "agora.h"
-#include "IAgoraRtcEngine.h"
-#include "AudioFrameObserver.h"
-#include "IAgoraMediaEngine.h"
-#include "AGEngineEventHandler.h"
+#include "IAgoraServerEngine.h"
+#include "AgoraServerSdk.h"
 #include <stdio.h>
 
 #if !defined(min)
@@ -15,158 +13,122 @@
 #define F_PATH "/root/test.pcm"
 #define OUT_PATH "/root/out.pcm"
 #define INPUT_PATH "/root/inputAudio.pcm"
+#define RECEIVE_PATH "/root/receive.pcm"
 static FILE *g_fp = NULL;
 static FILE *g_out_fp = NULL;
 static FILE *g_input_fp = NULL;
+static FILE *g_receive_fp = NULL;
+
+static FILE *g_48pcm  = NULL;
+
 
 #define PCM_16000_16_1_SIZE 640
-AGEngineEventHandler eventHandler;
-
+#define PCM_48000_16_1_SIZE 960
 typedef void (*write_data_callback_t )(void *dst, void *src, int len);
-
-
-namespace agora {
-    namespace rtc {
-        class IRtcEngineEventHandler;
-        class IRtcEngine;
-        class RtcEngineParameters;
-    }
-}
-
-using namespace agora::rtc;
 
 class agora_context{
 public:
 	agora_context(){
-		//init agora
-    	m_agoraEngine = createAgoraRtcEngine();
-		mediaEngine = new agora::util::AutoPtr<agora::media::IMediaEngine>();
-		this->nSampleRate = 16000;
-		this->nChannels = 1;
-	}
-	
-	~agora_context(){
+		config.idleLimitSec = 300;//300s
+		//"channel_profile:(0:COMMUNICATION),(1:broadcast) default is 0/option"
+		config.channelProfile = static_cast<agora::linuxsdk::CHANNEL_PROFILE_TYPE>(0);
 
-		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "agora deconstruct\n");
-
-		//stop to push frame
-		if(m_parameters){
-			m_parameters->setExternalAudioSource(false, this->nSampleRate, this->nChannels);
-			delete m_parameters;
-            m_parameters = NULL;
-		}
-		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "2222222\n");
-
-		//stop observer incoming rtp
-		if(mediaEngine){
-			(*mediaEngine)->registerAudioFrameObserver(NULL);
-			delete mediaEngine;
-			mediaEngine = NULL;	
-		}
-		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "3333333\n");
+		config.isVideoOnly = 0;
+		config.isAudioOnly = 1;//only audio
+		//whether enable mixing 
+		config.isMixingEnabled = 0;
+		//set video mixing resolution
+		config.mixResolution = NULL;
+		//mixVideoAudio:(0:seperated Audio,Video) (1:mixed Audio & Video), default is 0 /option
+		config.mixedVideoAudio = 0;
 
 
-		if(m_agoraEngine != NULL) {
-			m_agoraEngine->leaveChannel();
-			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "leave channel\n");
-			m_agoraEngine->release(true);
-			m_agoraEngine = NULL;
-        }
-		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "444444444\n");
+		//location of file AgoraCoreService, need to be change while it's position change
+		config.appliteDir = "/root/git/freeswitch/src/mod/endpoints/mod_agora/agora_bin";
+		config.recordFileRootDir = "./";
+		config.cfgFilePath = NULL;
 
+		//input secret when enable decryptionMode/option
+		config.secret = NULL;
+		//decryption Mode, default is NULL/option
+		config.decryptionMode =  NULL;
 
-		if(audioFrameObserver){
-			delete audioFrameObserver;
-			audioFrameObserver = NULL;
-		}
-		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "66666666666\n");
+		//default is random value/option
+		config.lowUdpPort = 0; //what is the work of it?
+		config.highUdpPort = 0;
+		//default 5 (Video snapshot interval (second))
+		config.captureInterval = 5;
 
-		//TODO free mediaEngine
-	}
-
-	int init(char *appId){
-    	//initlize 
-    	RtcEngineContext ctx;
-
-		//here can set status change callback
-   	 	ctx.eventHandler = &eventHandler; 
-   		ctx.appId = appId;
-   		int ret = m_agoraEngine->initialize(ctx);
-		if(ret){
-				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "init mediaEngine failed\n");
-				return -1;
-		}
-   		(*mediaEngine).queryInterface(m_agoraEngine, agora::AGORA_IID_MEDIA_ENGINE);
-   		m_parameters = new RtcEngineParameters(m_agoraEngine);
-
-	}
-	void setup_Media(/*TODO can add some args to control*/){
-    	//media basic setup 
-  		int ret = m_agoraEngine->setChannelProfile(CHANNEL_PROFILE_LIVE_BROADCASTING);
-		if(ret == 0)
-      		ret = m_agoraEngine->setClientRole(CLIENT_ROLE_BROADCASTER);
- 	    m_agoraEngine->enableAudio();
-  	  	m_parameters->muteLocalAudioStream(0);
-  	 	m_agoraEngine->setAudioProfile((AUDIO_PROFILE_TYPE)0, (AUDIO_SCENARIO_TYPE)0);
-  	  	m_parameters->enableWebSdkInteroperability(0);
-	}
-
-	void set_palyback_callback(write_data_callback_t callback, void *userdata, 
-								int sampleRate = 16000, int channel =1, int renderTime = 20){
-	 	//set audioFrame receive parameter and callback observer
-		m_parameters->setPlaybackAudioFrameParameters(/*sampleRate*/sampleRate, /*channel*/channel,
-													  /*mode*/RAW_AUDIO_FRAME_OP_MODE_READ_ONLY,
-													   /*samplespercall*/sampleRate * renderTime / 1000 );
-		audioFrameObserver = new AudioFrameObserver(callback, userdata);
-		(*mediaEngine)->registerAudioFrameObserver(audioFrameObserver);
-	}
-
-	void join_channel(char *dynamicKey, char *channelId, char *info , int uid ){
-   		m_agoraEngine->joinChannel(dynamicKey, channelId, info, uid); 
-	}
-
-	void enable_external_source(int nSampleRate = 32000, int nChannels = 1){
-		//enable external audio source
-    	m_parameters->setExternalAudioSource(true, /*nSampleRate*/nSampleRate, /*nChannels*/nChannels);
-	}
-
-	void incoming_data(void *data, int nsampleRate, int nChannels, int renderTimeMs){
-
-
-		agora::media::IAudioFrameObserver::AudioFrame frame;
-    	int nSampleRate = nsampleRate;
-   		frame.bytesPerSample = 2;
-   		frame.channels = nChannels;
-   		frame.renderTimeMs = renderTimeMs;
-   		frame.samples = nSampleRate * renderTimeMs / 1000;  
-		frame.samplesPerSec = nSampleRate;
-   		frame.type = agora::media::IAudioFrameObserver::AUDIO_FRAME_TYPE::FRAME_TYPE_PCM16;
-    	frame.buffer = data;
+		//default 0 (0:save as file, 1:aac frame, 2:pcm frame, 3:mixed pcm frame) (Can't combine with isMixingEnabled) /option
+		config.decodeAudio = static_cast<agora::linuxsdk::AUDIO_FORMAT_TYPE>(3);
+		//default 0 (0:save as file, 1:h.264, 2:yuv, 3.jpg buffer, 4,jpg file, 5:jpg file and video file) (Can't combine with isMixingEnabled) /option
+		//config.decodeVideo = static_cast<agora::linuxsdk::VIDEO_FORMAT_TYPE>(2);
 		
+		//remote video stream type(0:STREAM_HIGH,1:STREAM_LOW), default is 0/option
+		config.streamType = static_cast<agora::linuxsdk::REMOTE_VIDEO_STREAM_TYPE>(0);
+		config.audioChannelNum = 1;
+		config.audioSampleRate = 32000;
+		//config.upstreamResolution = const_cast<char*>(upstreamResolution.c_str());
+		config.proxyServer = NULL;
+		//server.updateMixModeSetting(width, height, isMixingEnabled ? !isAudioOnly:false);
 
-    	(*mediaEngine)->pushAudioFrame(agora::media::MEDIA_SOURCE_TYPE::AUDIO_RECORDING_SOURCE, &frame, true);
 	}
 
-private:
-    //agora 
-    IRtcEngine*     m_agoraEngine;
-    RtcEngineParameters* m_parameters;
-    agora::util::AutoPtr<agora::media::IMediaEngine> *mediaEngine;
-    AudioFrameObserver *audioFrameObserver;
-	AGEngineEventHandler eventHandler;
+	~agora_context(){
+		server.stopService();
+		server.leaveChannel();
+  		server.release();
+	}
 
-	int nSampleRate;
-	int nChannels;
+	bool create_channel(const string &appid, const string &channelKey, const string &channelNanme,
+        uint32_t uid){	
+		return server.createChannel(appid, channelKey, channelNanme, uid, config);
 
+	}
+
+	void setReceiveAudioCallback(void *data, write_data_callback_t callback){
+		server.setReceiveAudioCallback(data, callback);
+	}
+
+	int start_service() {
+		return server.startService();
+	}
+
+	int stop_service(){
+		return server.stopService();
+	}
+
+	void send_audio(void *data ,int nSampleRate, int nchannels, int renderTimeMs){
+		server.sendAudioFrame(data, nSampleRate, nchannels, renderTimeMs);
+	}
+
+	AgoraServerSdk server;
+  	agora::server::ServerConfig config;
 };
+
 
 void write_frame_callback(void *dst, void *src, int len){
 
 	agora_session_t *session = (agora_session_t *)dst;
-	if(session && session->state == JOINED){
+	if(session && session->state == JOINED ){
+		
 		switch_mutex_lock(session->readbuf_mutex);
+			fwrite(src, 1, len ,g_receive_fp);
+			/*
+			if(g_48pcm == NULL)
+				g_48pcm = fopen("/root/media/32k.pcm", "rb");
+			if(feof(g_48pcm))
+				fseek(g_48pcm, 0, SEEK_SET);
+			
+			int sampleRate = 48000;
+			int buflen = sampleRate * 10 / 1000 * 2;
+			char buf[1024];
+			fread(buf, 1, buflen, g_48pcm);
+			*/
 
-		switch_buffer_write(session->readbuf, src, len);
+			switch_buffer_write(session->readbuf, src, len);
+			//switch_buffer_write(session->readbuf, buf, buflen);
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR,"recv data %d bytes\n", len);		
 
 		switch_mutex_unlock(session->readbuf_mutex);
 	}
@@ -191,72 +153,33 @@ agora_session_t *agora_init_session(char *channelID)
     
 	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR,"init mediaEngine successfully\n");
 
-
 	agora_context *agora_ctx = new agora_context();
-	agora_ctx->init("fe4b413a89e2440296df19089e518041");
-	agora_ctx->setup_Media();
-	agora_ctx->set_palyback_callback(write_frame_callback, session);
-	agora_ctx->enable_external_source(/*nSampleRate*/ 32000,  /*nChannels*/1);
-	agora_ctx->join_channel(/*dynamicKey*/NULL, /*channelId*/"w123", /*info*/NULL, /*uid*/301);
-
 	session->agora_ctx = agora_ctx;
-	session->state = JOINED;
+	agora_ctx->setReceiveAudioCallback(session, write_frame_callback);
+	if( !agora_ctx->create_channel(/*appId*/"fe4b413a89e2440296df19089e518041", /*channelKey*/"",
+						 			"w123", /*uid*/201)){
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "join channel failed\n");
+	}
+	else{
+		session->state = JOINED;
+	}
 
-    // //init agora
-    // session->m_agoraEngine = createAgoraRtcEngine(); 
-    // //initlize 
-    // RtcEngineContext ctx;
-
-    // ctx.eventHandler = &eventHandler; //here can set status change callback
-    // ctx.appId = "fe4b413a89e2440296df19089e518041";
-    // int ret = session->m_agoraEngine->initialize(ctx);
-	// if(!ret){
-	// 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR,"init mediaEngine successfully\n");
-	// }
-    // session->mediaEngine.queryInterface(session->m_agoraEngine, agora::AGORA_IID_MEDIA_ENGINE);
-    // session->m_parameters = new RtcEngineParameters(session->m_agoraEngine);
-
-    // //media basic setup 
-  	// ret = session->m_agoraEngine->setChannelProfile(CHANNEL_PROFILE_LIVE_BROADCASTING);
-	// if(ret == 0)
-    //     ret = session->m_agoraEngine->setClientRole(CLIENT_ROLE_BROADCASTER);
-    // session->m_agoraEngine->enableAudio();
-    // session->m_parameters->muteLocalAudioStream(0);
-    // session->m_agoraEngine->setAudioProfile((AUDIO_PROFILE_TYPE)0, (AUDIO_SCENARIO_TYPE)0);
-    // session->m_parameters->enableWebSdkInteroperability(0);
-	
-	
-    
-
-	// //set audioFrame receive parameter and callback observer
-	// session->m_parameters->setPlaybackAudioFrameParameters(/*sampleRate*/16000, /*channel*/1,
-	// 												  /*mode*/RAW_AUDIO_FRAME_OP_MODE_READ_ONLY, /*samplespercall*/16000/50);
-	// session->audioFrameObserver = new AudioFrameObserver(write_frame_callback, session);
-	// //session->audioFrameObserver->setAgoraSession(session);
-    // session->mediaEngine->registerAudioFrameObserver(session->audioFrameObserver);
-
-	// //join channel
-    // //session->m_agoraEngine->joinChannel(/*dynamicKey*/NULL, /*channelId*/channelID, /*info*/NULL, /*uid*/301); 
-    // session->m_agoraEngine->joinChannel(/*dynamicKey*/NULL, /*channelId*/"w123", /*info*/NULL, /*uid*/301); 
-
-
-	// //enable external audio source
-    // session->m_parameters->setExternalAudioSource(true, /*nSampleRate*/16000, /*nChannels*/1);
-
-    // //init agora done;
-	
+	agora_ctx->start_service();
+ 
 	g_out_fp = fopen(OUT_PATH, "wb+");
+	g_receive_fp = fopen(RECEIVE_PATH, "wb+");
 	g_input_fp = fopen(INPUT_PATH, "rb");
 	return session;
 }
 
 int agora_read_data_from_session(agora_session_t *session, switch_frame_t *read_frame)
 {
-	switch_size_t len = PCM_16000_16_1_SIZE;
+	switch_size_t len = PCM_48000_16_1_SIZE;
 	switch_assert(session);
 	len = min(len, read_frame->buflen);
 	switch_mutex_lock(session->readbuf_mutex);
-	read_frame->datalen = switch_buffer_read(session->readbuf, read_frame->data, len);
+		read_frame->datalen = switch_buffer_read(session->readbuf, read_frame->data, len);
+
 	switch_mutex_unlock(session->readbuf_mutex);
 	 switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "agora_read_data_from_session %d \n",
 	 read_frame->datalen);
@@ -270,18 +193,18 @@ int agora_write_data_to_session(agora_session_t *session, switch_frame_t *read_f
 
 	// switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "agora_write_data_to_session %d \n",
 	// read_frame->datalen);
-	fwrite(read_frame->data, read_frame->datalen, 1, g_out_fp);
+	//fwrite(read_frame->data, read_frame->datalen, 1, g_out_fp);
 
     //push pcm data to audioFrame send to agora sdk
 	agora_context *agora_ctx = (agora_context*)session->agora_ctx;
-	//agora_ctx->incoming_data(read_frame->data ,/*nSampleRate*/32000,/*nchannels*/1, /*renderTimeMs*/10);
+	agora_ctx->send_audio(read_frame->data ,/*nSampleRate*/32000,/*nchannels*/1, /*renderTimeMs*/10);
 
-	char buf[1000 ];
-	if(feof(g_input_fp))
-        fseek(g_input_fp, 0, SEEK_SET);
-    fread(buf, 1, 320 * 2, g_input_fp );
-	agora_ctx->incoming_data(buf ,/*nSampleRate*/32000,/*nchannels*/1, /*renderTimeMs*/10);
-	//
+	// char buf[1000];
+	// if(feof(g_input_fp))
+    //     fseek(g_input_fp, 0, SEEK_SET);
+    // fread(buf, 1, 320 * 2, g_input_fp );
+	// agora_ctx->send_audio(buf ,/*nSampleRate*/32000,/*nchannels*/1, /*renderTimeMs*/10);
+	
 	return 0;
 }
 
@@ -302,6 +225,10 @@ int agora_destory_session(agora_session_t *session)
 			g_out_fp = NULL;
 		}
 
+		if(g_receive_fp){
+			fclose(g_receive_fp);
+			g_receive_fp = NULL;
+		}
 
 		if(g_input_fp){
 			fclose(g_input_fp);
