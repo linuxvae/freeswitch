@@ -30,7 +30,7 @@ struct agora_session {
 typedef struct agora_session agora_session_t;
 
 int  agora_init_module(const char* appid);
-agora_session_t * agora_init_session(char *channelID);
+agora_session_t * agora_init_session(int src_number, char *channelID);
 
 int agora_read_data_from_session(agora_session_t * session, switch_frame_t *read_frame);
 int agora_write_data_to_session(agora_session_t * session, switch_frame_t *read_frame);
