@@ -11,6 +11,7 @@
 
 
 
+const int room_id_len = 16;
 typedef enum { INIT = 0, JOINED = 1, RS_DESTROY = 2 } agora_session_state_t;
 class agora_context;
 
@@ -26,11 +27,14 @@ struct agora_session {
 
     agora_context* agora_ctx;
 
+	int uid;
+	char room_id[16];
+
 };
 typedef struct agora_session agora_session_t;
 
 int  agora_init_module(const char* appid);
-agora_session_t * agora_init_session(int src_number, char *channelID);
+agora_session_t * agora_init_session(int src_number, char *room_id, char *channelID);
 
 int agora_read_data_from_session(agora_session_t * session, switch_frame_t *read_frame);
 int agora_write_data_to_session(agora_session_t * session, switch_frame_t *read_frame);

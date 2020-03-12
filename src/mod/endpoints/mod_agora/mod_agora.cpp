@@ -32,6 +32,7 @@
  */
 
 #include "agora.h"
+#include <cstring>
 #define AGORA_EVENT_CUSTOM "agora::custom"
 
 SWITCH_BEGIN_EXTERN_C SWITCH_MODULE_LOAD_FUNCTION(mod_agora_load);
@@ -208,7 +209,18 @@ switch_status_t agora_tech_init(agora_private_t *tech_pvt, switch_core_session_t
 
 	switch_core_session_set_read_codec(session, &tech_pvt->read_codec);
 	switch_core_session_set_write_codec(session, &tech_pvt->write_codec);
-	tech_pvt->agora_session = agora_init_session(atoi(tech_pvt->caller_profile->username) ,tech_pvt->caller_profile->destination_number);
+	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "use caller name %s\n", tech_pvt->caller_profile->destination_number);
+
+	//解析会议号
+	char room_id[room_id_len];
+	memset(room_id, 0 ,sizeof(room_id));
+	const char *destination_number = tech_pvt->caller_profile->destination_number;
+	const char* room_id_start = strchr(destination_number, '/');
+	const char* room_id_end =  strchr(destination_number, '@');
+	int len  = room_id_end - room_id_start -1;
+	memcpy(room_id, room_id_start + 1, len);
+
+	tech_pvt->agora_session = agora_init_session(atoi(tech_pvt->caller_profile->username) ,room_id, tech_pvt->caller_profile->destination_number);
 	if (tech_pvt->agora_session == NULL) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Can't initialize write codec\n");
 		return SWITCH_STATUS_FALSE;

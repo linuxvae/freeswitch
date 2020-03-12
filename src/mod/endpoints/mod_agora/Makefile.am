@@ -10,5 +10,5 @@ mod_gsmopen_la_CXXFLAGS = $(SWITCH_AM_CXXFLAGS)
 CXXFLAGS += -fpermissive -std=c++0x -fPIC -g -fno-omit-frame-pointer \                       
             -DNDEBUG=1 -Wconversion -O0 -Wall -W -fvisibility=hidden
 #mod_gsmopen_la_CPPFLAGS = -I$(SPANDSP_DIR)/src -I$(SPANDSP_BUILDDIR)/src -I.
-mod_agora_la_LDFLAGS  = -avoid-version -module -no-undefined -static-libgcc -std=c++11 -Wl,-rpath, $(AGORALIBPATH) -pthread -lpthread -L$(AGORALIBPATH) -lserver -Wl,-rpath=$(AGORALIBPATH) -ldl -lrt -lasound -lpulse
+mod_agora_la_LDFLAGS  = -avoid-version -module -no-undefined -static-libgcc -std=c++11 -Wl,-rpath, $(AGORALIBPATH) -pthread -lpthread -L$(AGORALIBPATH) -lserver -Wl,-rpath=$(AGORALIBPATH) -ldl -lrt -lasound -lpulse -ljansson -lcurl
 #mod_h323_la_LDFLAGS  = -avoid-version -module -no-undefined -shared -L/usr/lib -lopenh323 -lpt -lrt 

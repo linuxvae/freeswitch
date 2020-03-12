@@ -2,6 +2,8 @@
 #include "IAgoraServerEngine.h"
 #include "AgoraServerSdk.h"
 #include <stdio.h>
+#include <curl/curl.h>
+#include <jansson.h>
 
 #if !defined(min)
 #define min(a, b) ((a) <= (b) ? (a) : (b))
@@ -139,7 +141,111 @@ void write_frame_callback(void *dst, void *src, int len){
 
 int agora_init_module(const char *appid) { return 0; }
 
-agora_session_t *agora_init_session(int src_number, char *channelID)
+
+typedef void (*curl_callback_t)(void *buff, size_t size, size_t nmemb);
+
+
+static const char* get_uid_url = "https://coco-di1.sit.cmhk.com:28082/iocp-chatroom/meet/user/phone/save";
+static const char* join_url = 	 "https://coco-di1.sit.cmhk.com:28082/iocp-chatroom/meet/room/v2/phone/join";
+static const char* quit_url = 	 "https://coco-di1.sit.cmhk.com:28082/iocp-chatroom/meet/room/v2/phone/quit";
+
+
+static size_t write_function(void *buff, size_t size, size_t nmemb, void *content){
+    size_t realsize = size * nmemb;
+    char *p  = *(char ** )content;
+    size_t len = p ? strlen(p) : 0;
+    *(char **)content = (char *)realloc(p, len + realsize + 1);
+    p = *(char **)content;
+    if(p == NULL){
+        return -1;
+    }
+    memcpy(p+len, buff, realsize);
+    p[len + realsize] = '\0';
+    return realsize;
+}
+
+
+//curl request
+static int curl_request(const char *url , const char *format_data, char **content_a){
+	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "request %s with data %s\n", url, format_data);
+    static CURL *curl = NULL;
+	if(content_a)
+		*content_a = NULL;
+	char* content = NULL;
+	if(!curl){
+    	curl = curl_easy_init();//warn need to excute curl_easy_cleanup(curl) to free
+
+		 //设置请求的content-type为json格式
+        struct curl_slist* headers = NULL;
+        headers = curl_slist_append(headers, "Content-Type:application/json;charset=UTF-8");
+		curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+		//设置POST为1 这个动作是post(如果不设置，则默认为GET)、URL和FORM_DATA
+        curl_easy_setopt(curl, CURLOPT_POST, 1);
+		curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_function);
+	}
+
+    if(curl){
+		//设置数据与回调
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, format_data);
+		curl_easy_setopt(curl, CURLOPT_WRITEDATA, &content);
+
+        curl_easy_setopt(curl, CURLOPT_URL, url);
+        //不验证证书
+       //curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0);//设定为不验证证书和HOST
+       //curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0);
+       //curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, 1000); //设置超时时间
+        CURLcode code = curl_easy_perform(curl);
+
+ 		if(code == CURLE_OK || code == CURLE_FTP_ACCEPT_TIMEOUT){
+			 if(content){
+				json_error_t error;
+				json_t *content_json = json_loads(content, 0, &error);//need to free?
+				if(!content_json){
+					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "json loads content failed\n");
+					json_decref(content_json);
+					return -1;
+				}
+				json_t *code_json = json_object_get(content_json, "code");
+				if(json_integer_value(code_json)){
+					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "http failed with response: %s\n", content);
+					json_decref(content_json);
+					return -1;
+				}
+				json_decref(content_json);
+			 }
+
+
+			 if(content_a != NULL)
+			 	*content_a = content;
+			 else
+			 	free(content);
+			return 0;
+        }
+    }
+	return -1;
+}
+
+static int parse_id(char *content){
+	//使用json_load出来后进行解析，如果通过，返回结果
+	json_error_t error;
+	json_t *content_json = json_loads(content, 0, &error);//need to free?
+	int ret = -1;
+	if(content_json){
+		json_t *reseult_json = json_object_get(content_json, "result");
+		json_t* id_json = json_object_get(reseult_json, "id");
+		if(id_json)
+			ret =  json_integer_value(id_json);
+	}
+	else
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "json loads content failed\n");
+end:
+	if(content_json)
+		json_decref(content_json);
+	return ret;
+}
+
+
+agora_session_t *agora_init_session(int src_number, char *room_id, char *channelID)
 {
 
 	switch_memory_pool_t *pool = NULL;
@@ -151,24 +257,39 @@ agora_session_t *agora_init_session(int src_number, char *channelID)
 	session->state = INIT;
 	session->pool = pool;
     
-	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR,"init mediaEngine successfully\n");
-
 	agora_context *agora_ctx = new agora_context();
 	session->agora_ctx = agora_ctx;
+
+	//获取加入房间的id
+	char *content = NULL;
+	char formdata[100];
+	snprintf(formdata, 100, "{\"account\":\"%d\"}", src_number);
+	__int64_t id = 0;
+	if(!curl_request(get_uid_url, formdata, &content)){
+		if(!content || (session->uid = parse_id(content)) == -1){
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "parse id failed\n");
+		}
+
+		if(content)
+			free(content);
+	}
+
 	agora_ctx->setReceiveAudioCallback(session, write_frame_callback);
+	//加入房间
 	if( !agora_ctx->create_channel(/*appId*/"fe4b413a89e2440296df19089e518041", /*channelKey*/"",
-						 			"w123", /*uid*/src_number)){
+						 			room_id, /*uid*/session->uid) ){
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "join channel failed\n");
 	}
 	else{
-		session->state = JOINED;
+		snprintf(formdata, 100, "{\"roomId\":\"%s\", \"userId\":%d}", room_id, session->uid);
+		if(!curl_request(join_url, formdata, NULL)){
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "join channel successfully\n");
+			session->state = JOINED;
+			snprintf(session->room_id, room_id_len, "%s", room_id);
+		}
 	}
 
 	agora_ctx->start_service();
- 
-	g_out_fp = fopen(OUT_PATH, "wb+");
-	g_receive_fp = fopen(RECEIVE_PATH, "wb+");
-	g_input_fp = fopen(INPUT_PATH, "rb");
 	return session;
 }
 
@@ -219,6 +340,12 @@ int agora_destory_session(agora_session_t *session)
 			return 0;
 		}
 		session->state = RS_DESTROY;
+		//退出房间
+		char formdata[100];
+		snprintf(formdata, 100, "{\"roomId\":\"%s\",\"userId\":%d}", session->room_id, session->uid);
+		if(!curl_request(quit_url, formdata, NULL)){
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "quit channel successfully\n");
+		}
 
 		if(g_out_fp){
 			fclose(g_out_fp);
