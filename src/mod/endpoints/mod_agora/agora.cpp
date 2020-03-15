@@ -1,9 +1,12 @@
 #include "agora.h"
 #include "IAgoraServerEngine.h"
 #include "AgoraServerSdk.h"
+#include "agora_rtm.h"
 #include <stdio.h>
 #include <curl/curl.h>
+#include <stdlib.h>
 #include <jansson.h>
+
 
 #if !defined(min)
 #define min(a, b) ((a) <= (b) ? (a) : (b))
@@ -28,9 +31,16 @@ static FILE *g_48pcm  = NULL;
 #define PCM_48000_16_1_SIZE 960
 typedef void (*write_data_callback_t )(void *dst, void *src, int len);
 
+static const char* get_uid_url = "https://coco-di1.sit.cmhk.com:28082/iocp-chatroom/meet/user/phone/save";
+static const char* join_url = 	 "https://coco-di1.sit.cmhk.com:28082/iocp-chatroom/meet/room/v2/phone/join";
+static const char* quit_url = 	 "https://coco-di1.sit.cmhk.com:28082/iocp-chatroom/meet/room/v2/phone/quit";
+static const char* update_status = "https://coco-di1.sit.cmhk.com:28082/iocp-chatroom/meet/room/v2/user/Update";
+const char *agora_token = "fe4b413a89e2440296df19089e518041";
+
 class agora_context{
 public:
-	agora_context(){
+	agora_context( const char *token_a):agora_token(token_a){
+		rtm_ptr.reset(new AgoraRtm(token_a));
 		config.idleLimitSec = 300;//300s
 		//"channel_profile:(0:COMMUNICATION),(1:broadcast) default is 0/option"
 		config.channelProfile = static_cast<agora::linuxsdk::CHANNEL_PROFILE_TYPE>(0);
@@ -83,9 +93,25 @@ public:
 	}
 
 	bool create_channel(const string &appid, const string &channelKey, const string &channelNanme,
-        uint32_t uid){	
-		return server.createChannel(appid, channelKey, channelNanme, uid, config);
+        uint32_t uid, recv_callback_t cb1, void *cb1_arg){	
+		char user_id[25];
+		snprintf(user_id, 25, "%d", uid);
+		//媒体
+		if(!server.createChannel(appid, channelKey, channelNanme, uid, config)){
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "user %s create channel failed\n", user_id);
+			return false;
+		}
 
+		//通讯
+		if(!rtm_ptr->login(appid.c_str(), user_id)){
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "rtm: user %s login failed\n",user_id);
+			return false;
+		}
+		if(!rtm_ptr->joinChannel(channelNanme, cb1, cb1_arg)){
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "rtm: join channel %s failed\n", channelNanme);
+			return false;
+		}
+		return true;
 	}
 
 	void setReceiveAudioCallback(void *data, write_data_callback_t callback){
@@ -104,51 +130,20 @@ public:
 		server.sendAudioFrame(data, nSampleRate, nchannels, renderTimeMs);
 	}
 
-	AgoraServerSdk server;
-  	agora::server::ServerConfig config;
-};
-
-
-void write_frame_callback(void *dst, void *src, int len){
-
-	agora_session_t *session = (agora_session_t *)dst;
-	if(session && session->state == JOINED ){
-		
-		switch_mutex_lock(session->readbuf_mutex);
-			//fwrite(src, 1, len ,g_receive_fp);
-			/*
-			if(g_48pcm == NULL)
-				g_48pcm = fopen("/root/media/32k.pcm", "rb");
-			if(feof(g_48pcm))
-				fseek(g_48pcm, 0, SEEK_SET);
-			
-			int sampleRate = 48000;
-			int buflen = sampleRate * 10 / 1000 * 2;
-			char buf[1024];
-			fread(buf, 1, buflen, g_48pcm);
-			*/
-
-			switch_buffer_write(session->readbuf, src, len);
-			//switch_buffer_write(session->readbuf, buf, buflen);
-			//switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR,"recv data %d bytes\n", len);		
-
-		switch_mutex_unlock(session->readbuf_mutex);
+	void rtm_send_msg_to_peer(std::string &peerID, std::string &msg){
+		rtm_ptr->sendMessageToPeer(peerID, msg);
 	}
+
+	void rtm_send_msg_to_channel(string &msg){
+		rtm_ptr->sendMessageToChannel(msg);
+	}
+
+	AgoraServerSdk server;
+	unique_ptr<AgoraRtm> rtm_ptr;
+	agora::server::ServerConfig config;
+	const char* agora_token;
 	
-	return;
-}
-
-
-int agora_init_module(const char *appid) { return 0; }
-
-
-typedef void (*curl_callback_t)(void *buff, size_t size, size_t nmemb);
-
-
-static const char* get_uid_url = "https://coco-di1.sit.cmhk.com:28082/iocp-chatroom/meet/user/phone/save";
-static const char* join_url = 	 "https://coco-di1.sit.cmhk.com:28082/iocp-chatroom/meet/room/v2/phone/join";
-static const char* quit_url = 	 "https://coco-di1.sit.cmhk.com:28082/iocp-chatroom/meet/room/v2/phone/quit";
-
+};
 
 static size_t write_function(void *buff, size_t size, size_t nmemb, void *content){
     size_t realsize = size * nmemb;
@@ -214,7 +209,6 @@ static int curl_request(const char *url , const char *format_data, char **conten
 				json_decref(content_json);
 			 }
 
-
 			 if(content_a != NULL)
 			 	*content_a = content;
 			 else
@@ -224,6 +218,139 @@ static int curl_request(const char *url , const char *format_data, char **conten
     }
 	return -1;
 }
+
+void *rtm_recv_channel_msg(void *data, void *arg){
+	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "rtm_recv_channel_msg %s\n", data);
+
+	char *content = (char *)data;
+	agora_session_t *session = (agora_session_t *)arg;
+	//int audio_enable = 0, video_enable = 0;
+
+	//parse recv_msg
+	json_error_t error;
+	json_t *content_json = json_loads(content, 0, &error);
+	if(!content_json){
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "json loads content failed\n");
+		goto end;
+	}
+
+	const char *type = json_string_value(json_object_get(content_json, "type"));
+	if(!type){
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "rtm_recv_channel_msg type is NULL\n");
+		goto end;
+	}
+
+	int enable  = json_is_true(json_object_get(content_json ,"enable"));
+	const char *from_user = json_string_value(json_object_get(content_json ,"fromUserId"));
+	const char *to_user = json_string_value(json_object_get(content_json ,"toUserId"));
+	
+	char session_uid[20];
+	sprintf(session_uid, "%d", session->uid);
+	if(to_user && strcasecmp(to_user, session_uid)){
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "msg not for current session uid: %d\n", session->uid);
+		goto end;
+	}
+
+	//判断dst_user 是否与当前相等
+
+	//打开或者关闭摄像头
+	// 	{
+	// "type": "audio | video"
+	// "enable": "false"
+	// "fromUserId": "a的userId"
+	// "toUserId": "b的userId"
+	// "fromUserName": ""
+	//  "msgContent": ""
+	// }
+	char rtm_ack[200];
+	int rtm_ack_index = 0;
+	rtm_ack_index = sprintf(rtm_ack, "{\"type\":\"msg\", \"enable\":\"\", \"fromUserId\":\"%d\", \"toUserId\":\"%s\",",
+							session->uid, from_user);
+
+	char update_broadcast[200];
+	int update_broadcast_index = 0;
+	update_broadcast_index = sprintf(update_broadcast, "{\"type\":\"update\", \"enable\":\"\", \"fromUserId\":\"%d\", \"toUserId\":\" \","\
+							"\"msgContent\":\"\"", session->uid);
+
+	if(!strcmp(type, "audio")){
+		switch_mutex_lock(session->av_enable_mutex);
+
+		//更新后台状态
+		char formdata[100];
+		sprintf(formdata, "{\"userId\":%d, \"roomId\":\"%s\", \"audio\":%s}", 
+				session->uid, session->room_id, enable? "true": "false");
+		if(curl_request(update_status, formdata, NULL)){
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR,"update %d status failed\n", session->uid);
+			switch_mutex_unlock(session->av_enable_mutex);
+			goto end;
+		}
+
+		session->audio_enable = enable ? 1 : 0;
+
+		//rtm ack
+		sprintf(rtm_ack + rtm_ack_index, "\"msgContent\": \"%s\"}",session->audio_enable?" ":"已将成员静音" );
+
+		string dst_user(from_user);
+		string msg(rtm_ack);
+		session->agora_ctx->rtm_send_msg_to_peer(dst_user, msg);
+
+		switch_mutex_unlock(session->av_enable_mutex);
+
+		//发送通知消息到频道
+		string broadcast_msg(rtm_ack);
+		session->agora_ctx->rtm_send_msg_to_channel(broadcast_msg);
+
+		//TODO 播放提示告知客户端已经被静音了
+		//调用ivr
+
+	}
+	else if(!strcmp(type, "video")){
+		//TODO 加入视频后完善此块控制
+		switch_mutex_lock(session->av_enable_mutex);
+		session->video_enable = enable ? 1 : 0;
+		switch_mutex_unlock(session->av_enable_mutex);
+	}
+
+end:;
+	json_decref(content_json);
+	return NULL;
+}
+
+void write_frame_callback(void *dst, void *src, int len){
+	agora_session_t *session = (agora_session_t *)dst;
+	if(session && session->state == JOINED ){
+		switch_mutex_lock(session->readbuf_mutex);
+			//fwrite(src, 1, len ,g_receive_fp);
+			/*
+			if(g_48pcm == NULL)
+				g_48pcm = fopen("/root/media/32k.pcm", "rb");
+			if(feof(g_48pcm))
+				fseek(g_48pcm, 0, SEEK_SET);
+			
+			int sampleRate = 48000;
+			int buflen = sampleRate * 10 / 1000 * 2;
+			char buf[1024];
+			fread(buf, 1, buflen, g_48pcm);
+			*/
+
+			switch_buffer_write(session->readbuf, src, len);
+			//switch_buffer_write(session->readbuf, buf, buflen);
+			//switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR,"recv data %d bytes\n", len);		
+
+		switch_mutex_unlock(session->readbuf_mutex);
+	}
+	
+	return;
+}
+
+
+int agora_init_module(const char *appid) { return 0; }
+
+
+typedef void (*curl_callback_t)(void *buff, size_t size, size_t nmemb);
+
+
+
 
 static int parse_id(char *content){
 	//使用json_load出来后进行解析，如果通过，返回结果
@@ -253,11 +380,14 @@ agora_session_t *agora_init_session(int src_number, char *room_id, char *channel
 	switch_core_new_memory_pool(&pool);
 	session = switch_core_alloc(pool, sizeof(agora_session_t));
 	switch_mutex_init(&session->readbuf_mutex, SWITCH_MUTEX_NESTED, pool);
+	switch_mutex_init(&session->av_enable_mutex, SWITCH_MUTEX_NESTED, pool);
 	switch_buffer_create_dynamic(&session->readbuf, 512, 512, 1024000);
 	session->state = INIT;
 	session->pool = pool;
-    
-	agora_context *agora_ctx = new agora_context();
+	session->audio_enable = 1;
+	session->video_enable = 0;
+	
+	agora_context *agora_ctx = new agora_context(agora_token);
 	session->agora_ctx = agora_ctx;
 
 	//获取加入房间的id
@@ -275,21 +405,24 @@ agora_session_t *agora_init_session(int src_number, char *room_id, char *channel
 	}
 
 	agora_ctx->setReceiveAudioCallback(session, write_frame_callback);
+
 	//加入房间
-	if( !agora_ctx->create_channel(/*appId*/"fe4b413a89e2440296df19089e518041", /*channelKey*/"",
-						 			room_id, /*uid*/session->uid) ){
-		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "join channel failed\n");
+	snprintf(formdata, 100, "{\"roomId\":\"%s\", \"userId\":%d, \"audio\":true}", room_id, session->uid);
+	if(!curl_request(join_url, formdata, NULL)){
+		if( !agora_ctx->create_channel(/*appId*/agora_token, /*channelKey*/"",
+						 			room_id, /*uid*/session->uid ,rtm_recv_channel_msg, session) ){
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "join media channel failed\n");
+			//TODO leaving room
+		}
+		agora_ctx->start_service();
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "join channel successfully\n");
+		session->state = JOINED;
+		snprintf(session->room_id, room_id_len, "%s", room_id);
 	}
 	else{
-		snprintf(formdata, 100, "{\"roomId\":\"%s\", \"userId\":%d}", room_id, session->uid);
-		if(!curl_request(join_url, formdata, NULL)){
-			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "join channel successfully\n");
-			session->state = JOINED;
-			snprintf(session->room_id, room_id_len, "%s", room_id);
-		}
+		//TODO 释放资源
+		return NULL;
 	}
-
-	agora_ctx->start_service();
 	return session;
 }
 
@@ -300,7 +433,6 @@ int agora_read_data_from_session(agora_session_t *session, switch_frame_t *read_
 	len = min(len, read_frame->buflen);
 	switch_mutex_lock(session->readbuf_mutex);
 		read_frame->datalen = switch_buffer_read(session->readbuf, read_frame->data, len);
-
 	switch_mutex_unlock(session->readbuf_mutex);
 	 //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "agora_read_data_from_session %d \n",
 	 //read_frame->datalen);
@@ -311,6 +443,12 @@ int agora_read_data_from_session(agora_session_t *session, switch_frame_t *read_
 int agora_write_data_to_session(agora_session_t *session, switch_frame_t *read_frame)
 {
 	switch_assert(session);
+	switch_mutex_lock(session->av_enable_mutex);
+	if(!session->audio_enable){
+		switch_mutex_unlock(session->av_enable_mutex);
+		return 0;
+	}
+	switch_mutex_unlock(session->av_enable_mutex);
 
 	// switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "agora_write_data_to_session %d \n",
 	// read_frame->datalen);
