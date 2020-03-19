@@ -475,10 +475,12 @@ switch_status_t agora_on_soft_execute(switch_core_session_t *session)
 
 switch_status_t agora_send_dtmf(switch_core_session_t *session, const switch_dtmf_t *dtmf)
 {
+	switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "AGORA CHANNEL DTMF %c\n", dtmf->digit);
 	agora_private_t *tech_pvt = switch_core_session_get_private(session);
 	switch_assert(tech_pvt != NULL);
 
-	switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "AGORA CHANNEL DTMF %d\n", dtmf->digit);
+	agora_handle_dtmf(tech_pvt->agora_session, dtmf->digit);
+
 	return SWITCH_STATUS_SUCCESS;
 }
 
@@ -520,11 +522,12 @@ switch_status_t agora_read_frame(switch_core_session_t *session, switch_frame_t 
 		goto cng;
 	} else {
 		len = agora_read_data_from_session(rsession, &tech_pvt->read_frame);
+
 		if (len <= 0) {
 			goto cng;
 		}
 	}
-
+	//goto cng;
 	*frame = &tech_pvt->read_frame;
 
 	return SWITCH_STATUS_SUCCESS;
@@ -547,13 +550,14 @@ cng:
 switch_status_t agora_write_frame(switch_core_session_t *session, switch_frame_t *frame, switch_io_flag_t flags,
 								  int stream_id)
 {
+
+
 	switch_channel_t *channel = NULL;
 	agora_private_t *tech_pvt = NULL;
 	agora_session_t *rsession = NULL;
 	// switch_frame_t *pframe;
 	// switch_time_t ts;
 	switch_status_t status = SWITCH_STATUS_SUCCESS;
-
 	channel = switch_core_session_get_channel(session);
 	assert(channel != NULL);
 

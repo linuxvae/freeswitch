@@ -34,7 +34,8 @@ public:
     }
 
     virtual void audioFrameReceived(unsigned int uid, const agora::linuxsdk::AudioFrame *audioFrame) const {
-        return write_data_callback(user_data, audioFrame->frame.pcm->pcmBuf_, audioFrame->frame.pcm->pcmBufSize_);
+         write_data_callback(user_data, audioFrame->frame.pcm->pcmBuf_, audioFrame->frame.pcm->pcmBufSize_);
+         return;
     }
 
 private:

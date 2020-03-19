@@ -196,8 +196,6 @@ void AgoraRtm::sendMessageToPeer(std::string peerID, std::string msg) {
 }
 
 void AgoraRtm::sendMessageToChannel(string &msg) {
-    if(channelHandler)
-        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "not joined channel yet\n");
     agora::rtm::IMessage* rtmMessage = rtmService_->createMessage();
     rtmMessage->setText(msg.c_str());
     channelHandler->sendMessage(rtmMessage);

@@ -34,6 +34,10 @@ struct agora_session {
 	switch_mutex_t *av_enable_mutex;
 	int video_enable ;
 	int audio_enable ;
+	int playbacking ;
+	unsigned char* playing_pcm_buffer;
+	int playing_pcm_len;
+	int playing_offset;
 
 };
 typedef struct agora_session agora_session_t;
@@ -48,5 +52,8 @@ int agora_write_data_to_session(agora_session_t * session, switch_frame_t *read_
 //todo
 int agora_destory_session(agora_session_t * session);
 int agora_release_module();
+int agora_handle_dtmf(agora_session_t *session, char digit);
+int play_pcm_back(agora_session_t *session);
+
 
 typedef void * (*recv_callback_t)(void *data, void *arg);
