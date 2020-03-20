@@ -42,7 +42,6 @@ agora::recording::RecordingConfig* AgoraServerSdk::getConfigInfo() {
 }
 
 void AgoraServerSdk::sendAudioFrame(void *data, int nSampleRate, int nchannels, int renderTimeMs){
-
     agora::server::IServerEngine* m_server = dynamic_cast<agora::server::IServerEngine*>(m_engine);  
     if(!m_server)
         return;

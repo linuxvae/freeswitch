@@ -522,14 +522,11 @@ switch_status_t agora_read_frame(switch_core_session_t *session, switch_frame_t 
 		goto cng;
 	} else {
 		len = agora_read_data_from_session(rsession, &tech_pvt->read_frame);
-
 		if (len <= 0) {
 			goto cng;
 		}
 	}
-	//goto cng;
 	*frame = &tech_pvt->read_frame;
-
 	return SWITCH_STATUS_SUCCESS;
 
 cng:

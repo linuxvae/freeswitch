@@ -7,6 +7,7 @@
 #include <curl/curl.h>
 #include <stdlib.h>
 #include <jansson.h>
+#include <time.h>
 
 
 
@@ -49,9 +50,8 @@ static const char* join_url = 	 "https://coco-di1.sit.cmhk.com:28082/iocp-chatro
 static const char* quit_url = 	 "https://coco-di1.sit.cmhk.com:28082/iocp-chatroom/meet/room/v2/phone/quit";
 static const char* update_status = "https://coco-di1.sit.cmhk.com:28082/iocp-chatroom/meet/room/v2/user/Update";
 const char *agora_token = "fe4b413a89e2440296df19089e518041";
-static unsigned char audio_enable_pcm[PCM_BUFFER_LEN];
-static unsigned char audio_disable_pcm[PCM_BUFFER_LEN];
-vector<unsigned char> pcms;
+static char audio_enable_pcm[PCM_BUFFER_LEN];
+static char audio_disable_pcm[PCM_BUFFER_LEN];
 static int pcm_init = 0;
 static int audio_enable_pcm_len = 0;
 static int audio_disable_pcm_len = 0;
@@ -253,29 +253,30 @@ int change_session_audio_status(agora_session_t* session, int enable){
 
 	switch_mutex_lock(session->av_enable_mutex);
 		if(session->audio_enable == enable){
-			switch_mutex_unlock(session->av_enable_mutex);
-			goto end;
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR,"session audio_enable not need to changed\n");
 		}
-		//更新后台状态
-		char formdata[100];
-		sprintf(formdata, "{\"userId\":%d, \"roomId\":\"%s\", \"audio\":%s}", 
-				session->uid, session->room_id, enable? "true": "false");
-		if(curl_request(update_status, formdata, NULL)){
-			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR,"update %d status failed\n", session->uid);
-			switch_mutex_unlock(session->av_enable_mutex);
-			return -1;
+		else{
+			//更新后台状态
+			char formdata[100];
+			sprintf(formdata, "{\"userId\":%d, \"roomId\":\"%s\", \"audio\":%s}", 
+					session->uid, session->room_id, enable? "true": "false");
+			if(curl_request(update_status, formdata, NULL)){
+				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR,"update %d status failed\n", session->uid);
+				switch_mutex_unlock(session->av_enable_mutex);
+				return -1;
+			}
+
+			session->audio_enable = enable ? 1 : 0;
+
+			//发送通知消息到频道
+			string broadcast_msg(update_broadcast);
+			session->agora_ctx->rtm_send_msg_to_channel(broadcast_msg);
 		}
 
-		session->audio_enable = enable ? 1 : 0;
-
-		//发送通知消息到频道
-		string broadcast_msg(update_broadcast);
-		session->agora_ctx->rtm_send_msg_to_channel(broadcast_msg);
 	switch_mutex_unlock(session->av_enable_mutex);
 
-end:;
 	//播放声音通知客户端
-	play_pcm_back(session);
+	write_pcm_back(session);
 	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "session %d audio change successfully\n",session->uid);
 }
 
@@ -370,83 +371,31 @@ void agora_pcm_recv_callback(void *dst, void *src, int len){
 	if(session && session->state == JOINED ){
 		switch_mutex_lock(session->readbuf_mutex);
 			if(session->playbacking){
-				//从playing pcm buffer中读数据
-				int remain_len = session->playing_pcm_len - session->playing_offset;
-				
-				len = min(remain_len, len);
-				int buffer_write = switch_buffer_write(session->readbuf, session->playing_pcm_buffer + session->playing_offset, len);
-				if (!buffer_write){
-					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "no more space for writing\n");
-				}
-				else{
-					session->playing_offset += len;
-					if(session->playing_offset == session->playing_pcm_len)
-						session->playbacking = 0;
-				}
-				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "writting buffer pcm to session\n");
+				switch_mutex_unlock(session->readbuf_mutex);
+				return;
 			}
-			else{
-				if (!switch_buffer_write(session->readbuf, src, len))
+			if (!switch_buffer_write(session->readbuf, src, len)){
 					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "no more space for writing\n");
 			}
-
-			//fwrite(src, 1, len ,g_receive_fp);
-			/*
-			if(g_48pcm == NULL)
-				g_48pcm = fopen("/root/media/32k.pcm", "rb");
-			if(feof(g_48pcm))
-				fseek(g_48pcm, 0, SEEK_SET);
-			
-			int sampleRate = 48000;
-			int buflen = sampleRate * 10 / 1000 * 2;
-			char buf[1024];
-			fread(buf, 1, buflen, g_48pcm);
-			*/
-
-
-			//switch_buffer_write(session->readbuf, buf, buflen);
-			//switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR,"recv data %d bytes\n", len);		
-
 		switch_mutex_unlock(session->readbuf_mutex);
 	}
 	return;
 }
 
-
-void set_playing_pcm(void *dst, void *src, int len){
+void clean_and_write_frame(void *dst, void *src, int len){
 	agora_session_t *session = (agora_session_t *)dst;
 	if(session && session->state == JOINED ){
 		switch_mutex_lock(session->readbuf_mutex);
-			//fwrite(src, 1, len ,g_receive_fp);
-			/*
-			if(g_48pcm == NULL)
-				g_48pcm = fopen("/root/media/32k.pcm", "rb");
-			if(feof(g_48pcm))
-				fseek(g_48pcm, 0, SEEK_SET);
-			
-			int sampleRate = 48000;
-			int buflen = sampleRate * 10 / 1000 * 2;
-			char buf[1024];
-			fread(buf, 1, buflen, g_48pcm);
-			*/
-
-			//标记再来读pcm数据要从playing_pcm_buffer里面读
 			session->playbacking = 1;
-			session->playing_pcm_buffer = (unsigned char *)src;
-			session->playing_pcm_len = len;
-			session->playing_offset = 0;
-
-			//清空缓存buffer
+			gettimeofday(&session->last_play_read_time, NULL); 
 			switch_buffer_zero(session->readbuf);
-			//switch_buffer_write(session->readbuf, buf, buflen);
-			//switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR,"recv data %d bytes\n", len);		
-
+			switch_buffer_write(session->readbuf, src, len);
 		switch_mutex_unlock(session->readbuf_mutex);
 	}
 	return;
 }
 
-int play_pcm_back(agora_session_t *session){
+int write_pcm_back(agora_session_t *session){
 
 	//FIXME 此处需要加锁判断，或者在模块被加载完成的时候就直接初始化
 	if(pcm_init == 0){
@@ -489,11 +438,11 @@ int play_pcm_back(agora_session_t *session){
 
 	if(session->audio_enable){
 		//play back disable pcm
-		set_playing_pcm(session, audio_enable_pcm, audio_enable_pcm_len);
+		clean_and_write_frame(session, audio_enable_pcm, audio_enable_pcm_len);
 	}
 	else {
 		//play back disable pcm
-		set_playing_pcm(session, audio_disable_pcm, audio_disable_pcm_len);
+		clean_and_write_frame(session, audio_disable_pcm, audio_disable_pcm_len);
 	}
 	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "play info successfully\n");
 	return 0;
@@ -507,7 +456,7 @@ typedef void (*curl_callback_t)(void *buff, size_t size, size_t nmemb);
 
 int agora_handle_dtmf(agora_session_t *session, char digit){
 	if(digit == '0'){//查询状态
-		play_pcm_back(session);
+		write_pcm_back(session);
 	}
 	else if(digit == '1'){//mute audio
 		change_session_audio_status(session, 0);
@@ -550,7 +499,7 @@ agora_session_t *agora_init_session(int src_number, char *room_id, char *channel
 	session = switch_core_alloc(pool, sizeof(agora_session_t));
 	switch_mutex_init(&session->readbuf_mutex, SWITCH_MUTEX_NESTED, pool);
 	switch_mutex_init(&session->av_enable_mutex, SWITCH_MUTEX_NESTED, pool);
-	switch_buffer_create_dynamic(&session->readbuf, 512, 512, 1024000);
+	switch_buffer_create_dynamic(&session->readbuf, 512, 512, 4800);
 	session->state = INIT;
 	session->pool = pool;
 	session->audio_enable = 1;
@@ -594,6 +543,19 @@ agora_session_t *agora_init_session(int src_number, char *room_id, char *channel
 	}
 	return session;
 }
+struct switch_buffer {
+	switch_byte_t *data;
+	switch_byte_t *head;
+	switch_size_t used;
+	switch_size_t actually_used;
+	switch_size_t datalen;
+	switch_size_t max_len;
+	switch_size_t blocksize;
+	switch_mutex_t *mutex;
+	uint32_t flags;
+	uint32_t id;
+	int32_t loops;
+};
 
 int agora_read_data_from_session(agora_session_t *session, switch_frame_t *read_frame)
 {
@@ -601,8 +563,33 @@ int agora_read_data_from_session(agora_session_t *session, switch_frame_t *read_
 	switch_assert(session);
 	len = min(len, read_frame->buflen);
 	switch_mutex_lock(session->readbuf_mutex);
-		read_frame->datalen = switch_buffer_read(session->readbuf, read_frame->data, len);
+		//plyaback的时候，readbuf数据量过多，读取的速度过快，会导致音频变形
+		if( session->playbacking){
+			struct timeval now;
+			gettimeofday(&now, NULL);
+			long interval = (long)now.tv_sec*1000 + (long)now.tv_usec/1000 - 
+							(long)session->last_play_read_time.tv_sec*1000- (long)session->last_play_read_time.tv_usec/1000;
+			if(interval < 10){
+				switch_mutex_unlock(session->readbuf_mutex);
+				return 0;
+			}
+			session->last_play_read_time = now;
+		}
+
+		//switch_byte_t *head = session->readbuf->head;
+		//switch_size_t used = session->readbuf->used;
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "read_frame head %u, used: %d\n",session->readbuf->head,
+							session->readbuf->used);
+		//read_frame->datalen = switch_buffer_read(session->readbuf, read_frame->data, len);
+
+
+		if(session->playbacking && switch_buffer_inuse(session->readbuf) == 0)
+				session->playbacking = 0;
 		//buffer_len -= read_frame->datalen;
+
+
+		// session->readbuf->head = head;
+		// session->readbuf->used = used;
 	switch_mutex_unlock(session->readbuf_mutex);
 	//switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "reading msg len %d, buffer_len%d\n", len, buffer_len);
 

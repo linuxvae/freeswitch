@@ -7,7 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
+#include <time.h>
 
 
 
@@ -35,9 +35,8 @@ struct agora_session {
 	int video_enable ;
 	int audio_enable ;
 	int playbacking ;
-	unsigned char* playing_pcm_buffer;
-	int playing_pcm_len;
-	int playing_offset;
+	struct timeval last_play_read_time; //上层回调太频繁，用来控制读取间隔
+
 
 };
 typedef struct agora_session agora_session_t;
@@ -53,7 +52,7 @@ int agora_write_data_to_session(agora_session_t * session, switch_frame_t *read_
 int agora_destory_session(agora_session_t * session);
 int agora_release_module();
 int agora_handle_dtmf(agora_session_t *session, char digit);
-int play_pcm_back(agora_session_t *session);
+int write_pcm_back(agora_session_t *session);
 
 
 typedef void * (*recv_callback_t)(void *data, void *arg);

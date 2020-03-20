@@ -30,7 +30,6 @@ public:
     void setReceiveAudioCallback(void *data, write_data_callback_t callback){
         user_data = data;
         write_data_callback = callback;
-
     }
 
     virtual void audioFrameReceived(unsigned int uid, const agora::linuxsdk::AudioFrame *audioFrame) const {
