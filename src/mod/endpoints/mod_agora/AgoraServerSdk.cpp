@@ -51,7 +51,7 @@ void AgoraServerSdk::sendAudioFrame(void *data, int nSampleRate, int nchannels, 
     pcmFr.sample_bits_ = 16;
     pcmFr.frame_ms_ = renderTimeMs;
     pcmFr.samples_ = nSampleRate * pcmFr.frame_ms_ / 1000 * pcmFr.channels_;
-	agora::linuxsdk::uint_t bytes = pcmFr.samples_ * (pcmFr.sample_bits_ / 8) * pcmFr.channels_;
+  	agora::linuxsdk::uint_t bytes = pcmFr.samples_ * (pcmFr.sample_bits_ / 8) * pcmFr.channels_;
 
     std::string pcmBuf;
     pcmBuf.reserve(bytes);

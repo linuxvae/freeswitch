@@ -48,46 +48,9 @@ typedef enum {
 	TFLAG_VID_WAIT_KEYFRAME = (1 << 4) /* Wait for video keyframe */
 } TFLAGS;
 
-struct agora_profile {
-	char *name; /* < Profile name */
 
-	const char *appid;
-	const char *context;  /* < Default dialplan name */
-	const char *dialplan; /* < Default dialplan context */
 
-	switch_memory_pool_t *pool;				  /* < Memory pool */
-	switch_thread_rwlock_t *rwlock;			  /* < Rwlock for reference counting */
-	uint32_t flags;							  /* < PFLAGS */
-	switch_mutex_t *mutex;					  /* < Mutex for call count */
-	int calls;								  /* < Active calls count */
-	int clients;							  /* < Number of connected clients */
-	switch_hash_t *agora_pvt_hash;			  /* < Active rtmp sessions */
-	switch_thread_rwlock_t *agora_pvt_rwlock; /* < rwlock for session hashtable */
-};
-typedef struct agora_profile agora_profile_t;
 
-struct agora_private {
-	agora_profile_t *profile;
-	switch_codec_t read_codec; //后续把这个交给agora_session初始化
-	switch_codec_t write_codec;
-	switch_frame_t read_frame;
-	unsigned char databuf[SWITCH_RECOMMENDED_BUFFER_SIZE]; /* < Buffer for read_frame */
-	unsigned int flags;
-	switch_mutex_t *flag_mutex;
-	agora_session_t *agora_session;
-
-	switch_caller_profile_t *caller_profile;
-	switch_core_session_t *session;
-	switch_channel_t *channel;
-
-	const char *auth_user;
-	const char *auth_domain;
-	const char *auth;
-
-	const char *display_callee_id_name;
-	const char *display_callee_id_number;
-};
-typedef struct agora_private agora_private_t;
 
 /*** Endpoint interface ***/
 switch_call_cause_t agora_session_create_call(agora_session_t *rsession, switch_core_session_t **newsession,
@@ -212,20 +175,23 @@ switch_status_t agora_tech_init(agora_private_t *tech_pvt, switch_core_session_t
 	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "use caller name %s\n", tech_pvt->caller_profile->destination_number);
 
 	//解析会议号
-	char room_id[room_id_len];
-	memset(room_id, 0 ,sizeof(room_id));
 	const char *destination_number = tech_pvt->caller_profile->destination_number;
-	const char* room_id_start = strchr(destination_number, '/');
-	const char* room_id_end =  strchr(destination_number, '@');
-	int len  = room_id_end - room_id_start -1;
-	memcpy(room_id, room_id_start + 1, len);
+	//destination_number 示例: 9999...123456#@123456, 123456为roomid
+	std::string dst_number(destination_number); 
+	std::string invite_code;
+	std::size_t invite_code_start = dst_number.find("..") + 2;
+	std::size_t invite_code_end  = dst_number.find("#");
+	if(invite_code_start != std::string::npos && invite_code_end != std::string::npos
+		 && invite_code_start < invite_code_end)
+		invite_code.assign(dst_number, invite_code_start, invite_code_end - invite_code_start);
 
-	tech_pvt->agora_session = agora_init_session(atoi(tech_pvt->caller_profile->username) ,room_id, tech_pvt->caller_profile->destination_number);
+	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "start to init agora session\n");
+	tech_pvt->agora_session = agora_init_session(atoi(tech_pvt->caller_profile->username), invite_code);
 	if (tech_pvt->agora_session == NULL) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Can't initialize write codec\n");
 		return SWITCH_STATUS_FALSE;
 	}
-
+	tech_pvt->agora_session->agora_private = tech_pvt;
 	// static inline uint8_t agora_audio_codec(int channels, int bits, int rate, agora_audio_format_t format) {
 	// tech_pvt->audio_codec = 0xB2; //agora_audio_codec(1, 16, 0 /* speex is always 8000  */, agora_AUDIO_SPEEX);
 
@@ -265,7 +231,7 @@ switch_status_t agora_on_init(switch_core_session_t *session)
 	tech_pvt->profile->calls++;
 	switch_mutex_unlock(tech_pvt->profile->mutex);
 
-	switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "%s AGORA CHANNEL INIT\n",
+	switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "%s AGORA CHANNEL INIT\n",
 					  switch_channel_get_name(channel));
 
 	return SWITCH_STATUS_SUCCESS;
@@ -283,7 +249,7 @@ switch_status_t agora_on_routing(switch_core_session_t *session)
 	assert(tech_pvt != NULL);
 
 	agora_notify_call_state(session);
-	switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "%s AGORA CHANNEL ROUTING\n",
+	switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "%s AGORA CHANNEL ROUTING\n",
 					  switch_channel_get_name(channel));
 
 	return SWITCH_STATUS_SUCCESS;
@@ -341,7 +307,7 @@ switch_status_t agora_on_destroy(switch_core_session_t *session)
 		}
 		switch_mutex_unlock(tech_pvt->profile->mutex);
 	}
-	switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "%s AGORA CHANNEL DESTORY\n",
+	switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "%s AGORA CHANNEL DESTORY\n",
 					  switch_channel_get_name(channel));
 	return SWITCH_STATUS_SUCCESS;
 }
@@ -480,7 +446,6 @@ switch_status_t agora_send_dtmf(switch_core_session_t *session, const switch_dtm
 	switch_assert(tech_pvt != NULL);
 
 	agora_handle_dtmf(tech_pvt->agora_session, dtmf->digit);
-
 	return SWITCH_STATUS_SUCCESS;
 }
 
@@ -517,14 +482,9 @@ switch_status_t agora_read_frame(switch_core_session_t *session, switch_frame_t 
 
 	// switch_core_timer_next(&tech_pvt->timer);
 
-	if (switch_buffer_inuse(rsession->readbuf) < 2) {
-		/* Not enough data in buffer, return CNG frame */
+	len = agora_read_data_from_session(rsession, &tech_pvt->read_frame);
+	if (len <= 0) {
 		goto cng;
-	} else {
-		len = agora_read_data_from_session(rsession, &tech_pvt->read_frame);
-		if (len <= 0) {
-			goto cng;
-		}
 	}
 	*frame = &tech_pvt->read_frame;
 	return SWITCH_STATUS_SUCCESS;
@@ -601,7 +561,7 @@ switch_status_t agora_receive_message(switch_core_session_t *session, switch_cor
 	channel = switch_core_session_get_channel(session);
 	assert(channel != NULL);
 
-	switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR,
+	switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO,
 					  "%s AGORA CHANNEL agora_receive_message：%d\n", switch_channel_get_name(channel),
 					  msg->message_id);
 
@@ -1567,6 +1527,11 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_agora_load)
 
 	return SWITCH_STATUS_SUCCESS;
 }
+
+void agora_channel_hangup(agora_private_t *session){
+	switch_channel_hangup(session->channel, SWITCH_CAUSE_SYSTEM_SHUTDOWN);
+}
+
 
 SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_agora_shutdown)
 {
