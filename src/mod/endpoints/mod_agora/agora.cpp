@@ -58,7 +58,7 @@ public:
 	int len;
 };
 
-string path_prefix("/root/git/freeswitch/src/mod/endpoints/mod_agora/");
+string path_prefix("/usr/local/freeswitch/sounds/");
 const char *join_success_pcm 		= "pcm/joinSuccess.pcm";
 const char *disable_audio_pcm 		= "pcm/disableAudio.pcm";
 const char *enable_audio_pcm 		= "pcm/enableAudio.pcm";
