@@ -37,19 +37,33 @@ static FILE *g_48pcm  = NULL;
 #define PCM_BUFFER_LEN 1000000
 typedef void (*write_data_callback_t )(void *dst, void *src, int len);
 
-//pdr
-// static const char* get_uid_url = "https://coco.cmhk.com/iocp-chatroom/meet/user/phone/save";
-// static const char* join_url = 	 "https://coco.cmhk.com/iocp-chatroom/meet/room/v2/phone/join";
-// static const char* quit_url = 	 "https://coco.cmhk.com/iocp-chatroom/meet/room/v2/phone/quit";
-// static const char* update_status = "https://coco.cmhk.com/iocp-chatroom/meet/room/v2/user/Update";
+//一些需要根据实际情况进行更改的路径
 
-//di
-static const char* get_uid_url	   = "https://gw-api-hk-di1.sit.cmft.com:8085/cscontrol/meet/user/phone/save";
-static const char* join_url		   = "https://gw-api-hk-di1.sit.cmft.com:8085/cscontrol/meet/room/v2/phone/join";
-static const char* quit_url		   = "https://gw-api-hk-di1.sit.cmft.com:8085/cscontrol/meet/room/v2/phone/quit";
-static const char* update_status   = "https://gw-api-hk-di1.sit.cmft.com:8085/cscontrol/meet/room/v2/user/Update";
-static const char* invite_code_url = "https://gw-api-hk-di1.sit.cmft.com:8085/cscontrol/meet/room/v2/query/inviteCode";
-const char *agora_token			   = "fe4b413a89e2440296df19089e518041";
+//根据使用的是生产还是测试的后台修改请求路径
+static string url_prefix = "https://gw-api-hk-di1.sit.cmft.com:8085/";
+
+//声网的密钥
+static const char *agora_token			   = "fe4b413a89e2440296df19089e518041";
+//用于语音提示的pcm文件的存放路径
+static string pcm_path_prefix("/usr/local/freeswitch/sounds/");
+//声网库存放的路径
+static char * agora_libs_path = "/root/git/freeswitch/src/mod/endpoints/mod_agora/agora_bin"; 
+
+static const char *join_success_pcm 		= "pcm/joinSuccess.pcm";
+static const char *disable_audio_pcm 		= "pcm/disableAudio.pcm";
+static const char *enable_audio_pcm 		= "pcm/enableAudio.pcm";
+static const char *host_disable_audio_pcm 	= "pcm/hostDisableAudio.pcm";
+static const char *host_enable_audio_pcm 	= "pcm/hostEnableAudio.pcm";
+static const char *finish_meet_pcm 			= "pcm/finishMeet.pcm";
+static const char *invalid_opera_pcm 		= "pcm/invalidOpera.pcm";
+static const char *invite_code_err_pcm 		= "pcm/inviteCodeErr.pcm";
+static const char *silence_pcm 				= "pcm/silence.pcm";
+
+static string get_uid_url	   = url_prefix + "cscontrol/meet/user/phone/save";
+static string join_url		   = url_prefix + "cscontrol/meet/room/v2/phone/join";
+static string quit_url		   = url_prefix + "cscontrol/meet/room/v2/phone/quit";
+static string update_status    = url_prefix + "cscontrol/meet/room/v2/user/Update";
+static string invite_code_url  = url_prefix + "cscontrol/meet/room/v2/query/inviteCode";
 
 //pcm file
 class pcm_file{
@@ -58,27 +72,16 @@ public:
 	int len;
 };
 
-string path_prefix("/usr/local/freeswitch/sounds/");
-const char *join_success_pcm 		= "pcm/joinSuccess.pcm";
-const char *disable_audio_pcm 		= "pcm/disableAudio.pcm";
-const char *enable_audio_pcm 		= "pcm/enableAudio.pcm";
-const char *host_disable_audio_pcm 	= "pcm/hostDisableAudio.pcm";
-const char *host_enable_audio_pcm 	= "pcm/hostEnableAudio.pcm";
-const char *finish_meet_pcm 		= "pcm/finishMeet.pcm";
-const char *invalid_opera_pcm 		= "pcm/invalidOpera.pcm";
-const char *invite_code_err_pcm 	= "pcm/inviteCodeErr.pcm";
-const char *silence_pcm 			= "pcm/silence.pcm";
-
 //pcm_fils_path存放的内容要和PCM_TYPE的顺序一致
-vector<string> pcm_files_path{{path_prefix + join_success_pcm}, 
-							  {path_prefix + disable_audio_pcm}, 
-						  	  {path_prefix + enable_audio_pcm}, 
-							  {path_prefix + host_disable_audio_pcm}, 
-							  {path_prefix + host_enable_audio_pcm}, 
-							  {path_prefix + finish_meet_pcm},
-							  {path_prefix + invalid_opera_pcm},
-							  {path_prefix + invite_code_err_pcm},
-							  {path_prefix + silence_pcm}};
+vector<string> pcm_files_path{{pcm_path_prefix + join_success_pcm}, 
+							  {pcm_path_prefix + disable_audio_pcm}, 
+						  	  {pcm_path_prefix + enable_audio_pcm}, 
+							  {pcm_path_prefix + host_disable_audio_pcm}, 
+							  {pcm_path_prefix + host_enable_audio_pcm}, 
+							  {pcm_path_prefix + finish_meet_pcm},
+							  {pcm_path_prefix + invalid_opera_pcm},
+							  {pcm_path_prefix + invite_code_err_pcm},
+							  {pcm_path_prefix + silence_pcm}};
 
 map<PCM_TYPE, shared_ptr<pcm_file>> pcm_map;
 static int pcm_init = 0;
@@ -87,7 +90,9 @@ class agora_context{
 public:
 	agora_context( const char *token_a):agora_token(token_a){
 		rtm_ptr.reset(new AgoraRtm(token_a));
-		config.idleLimitSec = 300;//300s
+		//FIXME 房间没人之后，多久关闭channel，此处必须要这个，只能设置成无限大，这个检测会导致sigterm异
+		//常和崩溃，具体原因，暂时不明
+		config.idleLimitSec = 2000000000;//
 		//"channel_profile:(0:COMMUNICATION),(1:broadcast) default is 0/option"
 		config.channelProfile = static_cast<agora::linuxsdk::CHANNEL_PROFILE_TYPE>(0);
 
@@ -102,7 +107,7 @@ public:
 
 
 		//location of file AgoraCoreService, need to be change while it's position change
-		config.appliteDir = "/root/git/freeswitch/src/mod/endpoints/mod_agora/agora_bin";
+		config.appliteDir = agora_libs_path;
 		config.recordFileRootDir = "./";
 		config.cfgFilePath = NULL;
 
@@ -285,7 +290,7 @@ int change_session_audio_status(agora_session_t* session, int enable, PCM_TYPE p
 			char formdata[100];
 			sprintf(formdata, "{\"userId\":%d, \"roomId\":\"%s\", \"audio\":%s}", 
 					session->uid, session->room_id, enable? "true": "false");
-			if(curl_request(update_status, formdata, NULL)){
+			if(curl_request(update_status.c_str(), formdata, NULL)){
 				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR,"update %d status failed\n", session->uid);
 				switch_mutex_unlock(session->av_enable_mutex);
 				return -1;
@@ -610,7 +615,7 @@ void agora_join_meet(agora_session_t *session, string &invite_code){
 	int ret = 0;
 	snprintf(formdata, 100, "{\"inviteCode\":\"%s\"}", invite_code.c_str());
 
-	if(!curl_request(invite_code_url, formdata, &content)){
+	if(!curl_request(invite_code_url.c_str(), formdata, &content)){
 		if(!content || (room_id = parse_result_filed_str(content, "roomId")) == NULL){
 			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "parse roomId failed\n");
 			//play back 您的邀请码不正确请重新输入
@@ -633,7 +638,7 @@ void agora_join_meet(agora_session_t *session, string &invite_code){
 	//room_id = "096082593";
 	snprintf(formdata, 100, "{\"account\":\"%d\"}", session->src_number);
 	__int64_t id = 0;
-	if(!curl_request(get_uid_url, formdata, &content)){
+	if(!curl_request(get_uid_url.c_str(), formdata, &content)){
 		if(!content || (session->uid = parse_id(content)) == -1){
 			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "parse id failed\n");
 			//play back 您的邀请码不正确请重新输入
@@ -655,7 +660,7 @@ void agora_join_meet(agora_session_t *session, string &invite_code){
 
 	//加入房间
 	snprintf(formdata, 100, "{\"roomId\":\"%s\", \"userId\":%d, \"audio\":true}", room_id, session->uid);
-	if(!curl_request(join_url, formdata, NULL)){
+	if(!curl_request(join_url.c_str(), formdata, NULL)){
 		if( !agora_ctx->create_channel(/*appId*/agora_token, /*channelKey*/"",
 						 			room_id, /*uid*/session->uid ,rtm_recv_channel_msg, session) ){
 			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "join media channel failed\n");
@@ -697,67 +702,6 @@ agora_session_t *agora_init_session(int src_number, string &invite_code)
 
 	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "start to join meet\n");
 	agora_join_meet(session, invite_code);
-
-
-	// //获取房间邀请码
-	// invite_code = "902799068";
-	// char formdata[100];
-	// //char *room_id = NULL;
-	// char *content = NULL;
-	// // snprintf(formdata, 100, "{\"inviteCode\":\"%s\"}", invite_code);
-	// // if(!curl_request(invite_code_url, formdata, &content)){
-	// // 	if(!content || (room_id = parse_result_filed_str(content, "roomId")) == NULL){
-	// // 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "parse roomId failed\n");
-	// // 		//FIXME 
-	// // 		//TODO 释放资源
-	// // 	}
-
-	// // 	if(content)
-	// // 		free(content);
-	// // }
-
-	// //获取加入房间的id
-	// char *room_id = "734134060";
-	// snprintf(formdata, 100, "{\"account\":\"%d\"}", src_number);
-	// __int64_t id = 0;
-	// if(!curl_request(get_uid_url, formdata, &content)){
-	// 	if(!content || (session->uid = parse_id(content)) == -1){
-	// 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "parse id failed\n");
-	// 		//FIXME 
-	// 		//TODO 释放资源
-	// 	}
-
-	// 	if(content)
-	// 		free(content);
-	// }
-
-	// agora_ctx->setReceiveAudioCallback(session, agora_pcm_recv_callback);
-
-	// //加入房间
-	// snprintf(formdata, 100, "{\"roomId\":\"%s\", \"userId\":%d, \"audio\":true}", room_id, session->uid);
-	// if(!curl_request(join_url, formdata, NULL)){
-	// 	if( !agora_ctx->create_channel(/*appId*/agora_token, /*channelKey*/"",
-	// 					 			room_id, /*uid*/session->uid ,rtm_recv_channel_msg, session) ){
-	// 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "join media channel failed\n");
-	// 		//TODO leaving room
-	// 	}
-	// 	agora_ctx->start_service();
-	// 	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "join channel successfully\n");
-	// 	session->state = JOINED;
-	// 	snprintf(session->room_id, room_id_len, "%s", room_id);
-	// 	//delete room_id; 
-
-	// 	//播放进入会议成功提示
-	// 	write_pcm_back(session, JOIN_SUCCESS_PCM);
-
-	// }
-	// else{
-	// 	//TODO 释放资源
-	// 	return NULL;
-	// }
-
-
-
 
 	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "finish agora session init\n");
 	return session;
@@ -874,7 +818,7 @@ int agora_destory_session(agora_session_t *session)
 		//退出房间
 		char formdata[100];
 		snprintf(formdata, 100, "{\"roomId\":\"%s\",\"userId\":%d}", session->room_id, session->uid);
-		if(!curl_request(quit_url, formdata, NULL)){
+		if(!curl_request(quit_url.c_str(), formdata, NULL)){
 			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "quit channel successfully\n");
 		}
 
