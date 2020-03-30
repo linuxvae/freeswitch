@@ -1529,7 +1529,8 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_agora_load)
 }
 
 void agora_channel_hangup(agora_private_t *session){
-	switch_channel_hangup(session->channel, SWITCH_CAUSE_SYSTEM_SHUTDOWN);
+	//switch_channel_hangup(session->channel, SWITCH_CAUSE_SYSTEM_SHUTDOWN);
+	switch_channel_hangup(session->channel, SWITCH_CAUSE_NORMAL_CLEARING);
 }
 
 

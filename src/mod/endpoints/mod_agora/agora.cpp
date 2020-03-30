@@ -382,9 +382,16 @@ void *rtm_recv_channel_msg(void *data, void *arg){
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "finish send replay rtm\n");
 
 	}
-	else if (!strcmp(type, "finish")){
+	else if (!strcmp(type, "room")){
+		//rtm ack
+		sprintf(rtm_ack + rtm_ack_index, "\"msgContent\": \"%s\"}","移除成功");
+		string msg(rtm_ack);
+		session->agora_ctx->rtm_send_msg_to_peer(from_user_str, msg);
+
 		//收到解散会议的消息，发送语音给客户
 		write_pcm_back(session, FINISH_MEET_PCM);
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "receive finish\n");
+		
 	}
 	else if(!strcmp(type, "video")){
 		//TODO 加入视频后完善此块控制
@@ -608,7 +615,6 @@ void agora_join_meet(agora_session_t *session, string &invite_code){
 		return;
 	}
 
-	//invite_code = "902799068";
 	char formdata[100];
 	char *room_id = NULL;
 	char *content = NULL;
@@ -768,8 +774,10 @@ int agora_read_data_from_session(agora_session_t *session, switch_frame_t *read_
 		// 					session->readbuf->used);	
 
 	switch_mutex_unlock(session->readbuf_mutex);
-	if(hangup)
+	if(hangup){
 		agora_channel_hangup(session->agora_private);
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "hangup\n");
+	}
 
 	return read_frame->datalen;
 }
@@ -847,7 +855,6 @@ int agora_destory_session(agora_session_t *session)
 		
 
 		switch_buffer_destroy(&session->readbuf);
-
 		switch_core_destroy_memory_pool(&session->pool);
 		session = NULL;
 	}
