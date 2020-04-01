@@ -96,7 +96,7 @@ struct agora_session {
 	int video_enable;
 	int audio_enable;
 	int playbacking;
-	int hangup;
+	int playing_hangup;
 	pcm_play_ctx_t pcm_play_info;
 	struct timeval last_play_read_time; //上层回调太频繁，用来控制读取间隔
 

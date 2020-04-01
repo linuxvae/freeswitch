@@ -340,7 +340,8 @@ void *rtm_recv_channel_msg(void *data, void *arg){
 	int to_user = json_integer_value(json_object_get(content_json ,"toUserId"));
 	string to_user_str = to_string(to_user);
 	string session_uid = to_string(session->uid);
-	if(to_user_str.compare(session_uid)){
+	if((!strcmp(type, "audio") || !strcmp(type, "video") || !strcmp(type, "room"))
+		 && to_user_str.compare(session_uid)){
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "msg not for current session uid: %d\n", session->uid);
 		json_decref(content_json);
 		return NULL;
@@ -365,7 +366,7 @@ void *rtm_recv_channel_msg(void *data, void *arg){
 	update_broadcast_index = sprintf(update_broadcast, "{\"type\":\"update\", \"enable\":\"\", \"fromUserId\":%d, \"toUserId\":,"\
 							"\"msgContent\":\"\"", session->uid);
 
-	if(!strcmp(type, "audio")){
+	if(!strcmp(type, "audio") || !strcmp(type, "allAudio")){
 
 		if(change_session_audio_status(session, enable, enable ? HOST_ENABLE_AUDIO_PCM : HOST_DISABLE_AUDIO_PCM)){
 			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "change session %d audio failed\n", session->uid);
@@ -392,6 +393,10 @@ void *rtm_recv_channel_msg(void *data, void *arg){
 		write_pcm_back(session, FINISH_MEET_PCM);
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "receive finish\n");
 		
+	}
+	else if(!strcmp(type, "finish")){
+		//收到解散会议的消息，发送语音给客户
+		write_pcm_back(session, FINISH_MEET_PCM);
 	}
 	else if(!strcmp(type, "video")){
 		//TODO 加入视频后完善此块控制
@@ -427,8 +432,10 @@ void agora_pcm_recv_callback(void *dst, void *src, int len){
 
 void agora_set_session_play_pcm(agora_session_t* session, PCM_TYPE type){
 	gettimeofday(&session->last_play_read_time, NULL); 
+	session->last_play_read_time.tv_usec += 1000 * 50; //设置为50ms之后播放
 	session->pcm_play_info.play_type = type;
 	session->pcm_play_info.buffer_read_offset = 0;
+	switch_buffer_zero(session->readbuf);
 }
 
 switch_size_t agora_read_pcm(pcm_play_ctx_t *play_ctx, void *data, switch_size_t datalen){
@@ -503,7 +510,7 @@ int write_pcm_back(agora_session_t *session, PCM_TYPE pcm_type){
 	else {
 		switch_mutex_lock(session->readbuf_mutex);
 		session->playbacking = 1;
-		session->hangup = 1;
+		session->playing_hangup = 1;
 		agora_set_session_play_pcm(session, pcm_type);
 		switch_mutex_unlock(session->readbuf_mutex);
 	}
@@ -760,7 +767,7 @@ int agora_read_data_from_session(agora_session_t *session, switch_frame_t *read_
 					session->playbacking = 1;
 				}
 
-				if(session->hangup)//如果设置了hangup，播放完了finish meet，要挂断通道
+				if(session->playing_hangup)//如果设置了hangup，播放完了finish meet，要挂断通道
 					hangup = 1;
 			
 			}
