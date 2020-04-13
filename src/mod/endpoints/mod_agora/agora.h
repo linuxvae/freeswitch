@@ -12,6 +12,10 @@
 
 using std::string;
 
+#define PCM_16000_16_1_SIZE 640
+#define PCM_48000_16_1_SIZE 960
+#define PCM_BUFFER_LEN 1000000
+
 const int room_id_len = 16;
 class agora_context;
 typedef struct agora_session agora_session_t;
@@ -37,6 +41,9 @@ struct agora_profile {
 	const char *appid;
 	const char *context;  /* < Default dialplan name */
 	const char *dialplan; /* < Default dialplan context */
+	const char *coco_app_url;	//coco 会控后台地址
+	const char *pcm_file_dir;  //pcm file 存放地址
+	const char *agora_token; //使用的声网密钥
 
 	switch_memory_pool_t *pool;				  /* < Memory pool */
 	switch_thread_rwlock_t *rwlock;			  /* < Rwlock for reference counting */
@@ -106,8 +113,14 @@ struct agora_session {
 
 };
 
+//pcm file
+class pcm_file{
+public:
+	char data[PCM_BUFFER_LEN];
+	int len;
+};
 
-int  agora_init_module(const char* appid);
+int agora_init_module(const char* coco_app_url_a, const char* pcm_file_path_a, const char* agora_token_a);
 agora_session_t *agora_init_session(int src_number, string &invite_code);
 
 int agora_read_data_from_session(agora_session_t * session, switch_frame_t *read_frame);

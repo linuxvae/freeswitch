@@ -32,59 +32,40 @@ static FILE *g_receive_fp = NULL;
 static FILE *g_48pcm  = NULL;
 
 
-#define PCM_16000_16_1_SIZE 640
-#define PCM_48000_16_1_SIZE 960
-#define PCM_BUFFER_LEN 1000000
 typedef void (*write_data_callback_t )(void *dst, void *src, int len);
 
 //一些需要根据实际情况进行更改的路径
 
 //根据使用的是生产还是测试的后台修改请求路径
-static string url_prefix = "https://gw-api-hk-di1.sit.cmft.com:8085/";
+static string coco_app_url;
+static string url_prefix = "https://gw-api-hk-di1.sit.cmft.com:8085";
 
 //声网的密钥
-static const char *agora_token			   = "fe4b413a89e2440296df19089e518041";
-//用于语音提示的pcm文件的存放路径
-static string pcm_path_prefix("/usr/local/freeswitch/sounds/");
+static string agora_token ;
+//static const char *agora_token		   = "fe4b413a89e2440296df19089e518041";
+
 //声网库存放的路径
-static char * agora_libs_path = "/root/git/freeswitch/src/mod/endpoints/mod_agora/agora_bin"; 
+static char * agora_bin_path = NULL;
 
-static const char *join_success_pcm 		= "pcm/joinSuccess.pcm";
-static const char *disable_audio_pcm 		= "pcm/disableAudio.pcm";
-static const char *enable_audio_pcm 		= "pcm/enableAudio.pcm";
-static const char *host_disable_audio_pcm 	= "pcm/hostDisableAudio.pcm";
-static const char *host_enable_audio_pcm 	= "pcm/hostEnableAudio.pcm";
-static const char *finish_meet_pcm 			= "pcm/finishMeet.pcm";
-static const char *invalid_opera_pcm 		= "pcm/invalidOpera.pcm";
-static const char *invite_code_err_pcm 		= "pcm/inviteCodeErr.pcm";
-static const char *silence_pcm 				= "pcm/silence.pcm";
+static const char *join_success_pcm 		= "/joinSuccess.pcm";
+static const char *disable_audio_pcm 		= "/disableAudio.pcm";
+static const char *enable_audio_pcm 		= "/enableAudio.pcm";
+static const char *host_disable_audio_pcm 	= "/hostDisableAudio.pcm";
+static const char *host_enable_audio_pcm 	= "/hostEnableAudio.pcm";
+static const char *finish_meet_pcm 			= "/finishMeet.pcm";
+static const char *invalid_opera_pcm 		= "/invalidOpera.pcm";
+static const char *invite_code_err_pcm 		= "/inviteCodeErr.pcm";
+static const char *silence_pcm 				= "/silence.pcm";
 
-static string get_uid_url	   = url_prefix + "cscontrol/meet/user/phone/save";
-static string join_url		   = url_prefix + "cscontrol/meet/room/v2/phone/join";
-static string quit_url		   = url_prefix + "cscontrol/meet/room/v2/phone/quit";
-static string update_status    = url_prefix + "cscontrol/meet/room/v2/user/Update";
-static string invite_code_url  = url_prefix + "cscontrol/meet/room/v2/query/inviteCode";
+static string get_uid_url;
+static string join_url;
+static string quit_url;
+static string update_status ;
+static string invite_code_url;
+static int initilized = 0;
 
-//pcm file
-class pcm_file{
-public:
-	char data[PCM_BUFFER_LEN];
-	int len;
-};
-
-//pcm_fils_path存放的内容要和PCM_TYPE的顺序一致
-vector<string> pcm_files_path{{pcm_path_prefix + join_success_pcm}, 
-							  {pcm_path_prefix + disable_audio_pcm}, 
-						  	  {pcm_path_prefix + enable_audio_pcm}, 
-							  {pcm_path_prefix + host_disable_audio_pcm}, 
-							  {pcm_path_prefix + host_enable_audio_pcm}, 
-							  {pcm_path_prefix + finish_meet_pcm},
-							  {pcm_path_prefix + invalid_opera_pcm},
-							  {pcm_path_prefix + invite_code_err_pcm},
-							  {pcm_path_prefix + silence_pcm}};
 
 map<PCM_TYPE, shared_ptr<pcm_file>> pcm_map;
-static int pcm_init = 0;
 
 class agora_context{
 public:
@@ -107,7 +88,7 @@ public:
 
 
 		//location of file AgoraCoreService, need to be change while it's position change
-		config.appliteDir = agora_libs_path;
+		config.appliteDir = agora_bin_path;
 		config.recordFileRootDir = "./";
 		config.cfgFilePath = NULL;
 
@@ -159,7 +140,7 @@ public:
 			return false;
 		}
 		if(!rtm_ptr->joinChannel(channelNanme, cb1, cb1_arg)){
-			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "rtm: join channel %s failed\n", channelNanme);
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "rtm: join channel %s failed\n", channelNanme.c_str());
 			return false;
 		}
 		return true;
@@ -466,41 +447,6 @@ void clean_and_write_frame(void *dst, void *src, int len){
 
 int write_pcm_back(agora_session_t *session, PCM_TYPE pcm_type){
 
-	//FIXME 此处需要加锁判断，或者在模块被加载完成的时候就直接初始化
-	if(pcm_init == 0){
-		//加载pcm文件到内存
-		pcm_init = 1;
-		int count = 0 ;
-		struct stat fileInfo;
-
-		int file_size =  0;
-		int index = 0;
-		PCM_TYPE pcm_type = (PCM_TYPE)0;
-		for(auto& file_path: pcm_files_path){
-			if (stat(file_path.c_str(), &fileInfo)<0){
-				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "stat file %s failed\n", file_path.c_str());
-				exit(0);
-			}
-			else{
-				if(fileInfo.st_size > PCM_BUFFER_LEN){
-					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "file %s size %d larger than buffer %d\n",
-									file_path.c_str(), PCM_BUFFER_LEN);
-				exit(0);
-				}
-			}
-			shared_ptr<pcm_file> *pcm_file_ptr = new shared_ptr<pcm_file>(new pcm_file());
-			(*pcm_file_ptr)->len = fileInfo.st_size;
-			FILE *fd = fopen(file_path.c_str(), "rb");
-			fread((*pcm_file_ptr)->data, 1, PCM_BUFFER_LEN, fd);
-			fclose(fd);
-			pcm_map.insert(map<PCM_TYPE, shared_ptr<pcm_file>>::value_type(pcm_type, std::move(*pcm_file_ptr)));
-			pcm_type = (PCM_TYPE)((int)pcm_type + 1);
-		}
-
-		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "finish pcm file loading initilized, load %d pcm file\n",
-						 pcm_map.size());
-	}
-
 	if(pcm_type != FINISH_MEET_PCM){
 		switch_mutex_lock(session->readbuf_mutex);
 		session->playbacking = 1;
@@ -519,7 +465,84 @@ int write_pcm_back(agora_session_t *session, PCM_TYPE pcm_type){
 }
 
 
-int agora_init_module(const char *appid) { return 0; }
+int agora_init_module(const char* coco_app_url_a, const char* pcm_file_path_a, const char* agora_token_a){ 
+	if(initilized){
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "agora has been initilized");
+		return 0;
+	}
+
+	if(!coco_app_url_a || !pcm_file_path_a || !agora_token_a){
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "coco_app_url or pcm_file_path or agora_token is NULL");
+		return -1;
+	}
+
+	agora_token.assign(agora_token_a);
+
+	coco_app_url.assign(coco_app_url_a);
+	get_uid_url	   	= coco_app_url + "/cscontrol/meet/user/phone/save";
+	join_url		= coco_app_url + "/cscontrol/meet/room/v2/phone/join";
+	quit_url		= coco_app_url + "/cscontrol/meet/room/v2/phone/quit";
+	update_status   = coco_app_url + "/cscontrol/meet/room/v2/user/Update";
+	invite_code_url = coco_app_url + "/cscontrol/meet/room/v2/query/inviteCode";
+
+
+
+	//pcm_fils_path存放的内容要和PCM_TYPE的顺序一致
+	string pcm_path_prefix(pcm_file_path_a);
+	vector<string> pcm_files_path = {{pcm_path_prefix + join_success_pcm}, 
+							 		{pcm_path_prefix + disable_audio_pcm}, 
+						  	        {pcm_path_prefix + enable_audio_pcm}, 
+							 		{pcm_path_prefix + host_disable_audio_pcm}, 
+									{pcm_path_prefix + host_enable_audio_pcm}, 
+									{pcm_path_prefix + finish_meet_pcm},
+									{pcm_path_prefix + invalid_opera_pcm},
+							 		{pcm_path_prefix + invite_code_err_pcm},
+							 		{pcm_path_prefix + silence_pcm}};
+
+	int count = 0 ;
+	struct stat fileInfo;
+
+	int file_size =  0;
+	int index = 0;
+	PCM_TYPE pcm_type = (PCM_TYPE)0;
+	for(auto& file_path: pcm_files_path){
+		if (stat(file_path.c_str(), &fileInfo)<0){
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "stat file %s failed\n", file_path.c_str());
+			exit(0);
+		}
+		else{
+			if(fileInfo.st_size > PCM_BUFFER_LEN){
+				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "file %s size %d larger than buffer %d\n",
+								file_path.c_str(), PCM_BUFFER_LEN);
+			exit(0);
+			}
+		}
+		shared_ptr<pcm_file> *pcm_file_ptr = new shared_ptr<pcm_file>(new pcm_file());
+		(*pcm_file_ptr)->len = fileInfo.st_size;
+		FILE *fd = fopen(file_path.c_str(), "rb");
+		fread((*pcm_file_ptr)->data, 1, PCM_BUFFER_LEN, fd);
+		fclose(fd);
+		pcm_map.insert(map<PCM_TYPE, shared_ptr<pcm_file>>::value_type(pcm_type, std::move(*pcm_file_ptr)));
+		pcm_type = (PCM_TYPE)((int)pcm_type + 1);
+	}
+
+	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "finish pcm file loading initilized, load %d pcm file\n",
+						pcm_map.size());
+
+
+#ifdef AGORA_BIN_PATH
+	agora_bin_path = AGORA_BIN_PATH;
+	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "set agora_bin_path to %s\n",agora_bin_path);
+#else
+	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "macro AGORA_LIBS_PATH not define, define it in Makefile.am to"
+					"specify the directory of AGORA_BIN_PAHT\n");
+	return -1;
+#endif;
+	
+	initilized = 1;
+	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "agora_init_module finish\n");
+	return 0;
+}
 
 
 typedef void (*curl_callback_t)(void *buff, size_t size, size_t nmemb);
@@ -674,7 +697,7 @@ void agora_join_meet(agora_session_t *session, string &invite_code){
 	//加入房间
 	snprintf(formdata, 100, "{\"roomId\":\"%s\", \"userId\":%d, \"audio\":true}", room_id, session->uid);
 	if(!curl_request(join_url.c_str(), formdata, NULL)){
-		if( !agora_ctx->create_channel(/*appId*/agora_token, /*channelKey*/"",
+		if( !agora_ctx->create_channel(/*appId*/agora_token.c_str(), /*channelKey*/"",
 						 			room_id, /*uid*/session->uid ,rtm_recv_channel_msg, session) ){
 			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "join media channel failed\n");
 			write_pcm_back(session, INVITE_CODE_ERR_PCM);
@@ -697,6 +720,11 @@ void agora_join_meet(agora_session_t *session, string &invite_code){
 
 agora_session_t *agora_init_session(int src_number, string &invite_code)
 {
+	if(!initilized){
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "agora not initilized\n");
+		return NULL;
+	}
+
 	switch_memory_pool_t *pool = NULL;
 	agora_session_t *session = NULL;
 	switch_core_new_memory_pool(&pool);
@@ -710,7 +738,7 @@ agora_session_t *agora_init_session(int src_number, string &invite_code)
 	session->video_enable = 0;
 	session->src_number = src_number;
 
-	agora_context *agora_ctx = new agora_context(agora_token);
+	agora_context *agora_ctx = new agora_context(agora_token.c_str());
 	session->agora_ctx = agora_ctx;
 
 	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "start to join meet\n");
@@ -719,7 +747,6 @@ agora_session_t *agora_init_session(int src_number, string &invite_code)
 	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "finish agora session init\n");
 	return session;
 }
-
 
 struct switch_buffer {
 	switch_byte_t *data;

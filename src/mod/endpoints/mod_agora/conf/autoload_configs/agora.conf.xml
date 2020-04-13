@@ -4,6 +4,9 @@
 		<settings>
 			<param name="appid" value="test" />
 			<param name="context" value="public" />
+            <param name="pcm_file_dir" value="/usr/local/freeswitch/sounds/pcm" />
+            <param name="coco_app_url" value="https://gw-api-hk-di1.sit.cmft.com:8085" />
+            <param name="agora_token" value="fe4b413a89e2440296df19089e518041"/>
 			<param name="dialplan" value="XML" />
 		</settings>
 	</profile>

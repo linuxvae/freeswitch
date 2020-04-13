@@ -188,7 +188,7 @@ switch_status_t agora_tech_init(agora_private_t *tech_pvt, switch_core_session_t
 	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "start to init agora session\n");
 	tech_pvt->agora_session = agora_init_session(atoi(tech_pvt->caller_profile->username), invite_code);
 	if (tech_pvt->agora_session == NULL) {
-		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Can't initialize write codec\n");
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Can't initialize agora session\n");
 		return SWITCH_STATUS_FALSE;
 	}
 	tech_pvt->agora_session->agora_private = tech_pvt;
@@ -1063,7 +1063,12 @@ switch_status_t agora_profile_start(const char *profilename)
 	switch_core_hash_init(&profile->agora_pvt_hash);
 	switch_thread_rwlock_create(&profile->agora_pvt_rwlock, pool);
 
-	agora_init_module(profile->appid);
+
+
+	if(agora_init_module(profile->coco_app_url, profile->pcm_file_dir, profile->agora_token)){
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "agora_init_module failed\n");
+		goto fail;
+	}
 
 	switch_core_hash_insert_wrlock(agora_globals.profile_hash, profile->name, profile, agora_globals.profile_rwlock);
 
@@ -1156,6 +1161,12 @@ static switch_xml_config_item_t *get_instructions(agora_profile_t *profile)
 						   &switch_config_string_strdup, "", "The dialplan to use for inbound calls"),
 		SWITCH_CONFIG_ITEM("appid", SWITCH_CONFIG_STRING, 0, &profile->appid, "", &switch_config_string_strdup,
 						   "app-id", "the profile agora appid"),
+		SWITCH_CONFIG_ITEM("coco_app_url", SWITCH_CONFIG_STRING, 0, &profile->coco_app_url, "", &switch_config_string_strdup,
+						   "coco_app_url", "coco conference app manager http interface"),
+		SWITCH_CONFIG_ITEM("pcm_file_dir", SWITCH_CONFIG_STRING, 0, &profile->pcm_file_dir, "", &switch_config_string_strdup,
+						   "pcm_file_dir", "pcm file directory"),
+		SWITCH_CONFIG_ITEM("agora_token", SWITCH_CONFIG_STRING, 0, &profile->agora_token, "", &switch_config_string_strdup,
+						   "agora_token", "agora token"),
 		SWITCH_CONFIG_ITEM_END()};
 
 	dup = malloc(sizeof(instructions));
